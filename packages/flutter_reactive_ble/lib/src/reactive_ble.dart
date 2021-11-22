@@ -10,6 +10,7 @@ import 'package:flutter_reactive_ble/src/rx_ext/repeater.dart';
 import 'package:meta/meta.dart';
 import 'package:reactive_ble_mobile/reactive_ble_mobile.dart';
 import 'package:reactive_ble_platform_interface/reactive_ble_platform_interface.dart';
+import 'package:reactive_ble_windows/reactive_ble_windows.dart';
 
 /// [FlutterReactiveBle] is the facade of the library. Its interface allows to
 /// perform all the supported BLE operations.
@@ -104,8 +105,13 @@ class FlutterReactiveBle {
         print,
       );
 
-      ReactiveBlePlatform.instance =
-          const ReactiveBleMobilePlatformFactory().create();
+      if (Platform.isWindows) {
+        ReactiveBlePlatform.instance =
+            const ReactiveBleWindowsPlatformFactory().create();
+      } else {
+        ReactiveBlePlatform.instance =
+            const ReactiveBleMobilePlatformFactory().create();
+      }
 
       _blePlatform = ReactiveBlePlatform.instance;
 
