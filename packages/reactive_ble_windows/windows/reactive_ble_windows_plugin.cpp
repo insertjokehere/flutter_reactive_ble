@@ -77,20 +77,20 @@ void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
           registrar->messenger(), "flutter_reactive_ble_method",
           &flutter::StandardMethodCodec::GetInstance());
   
-  // auto connectedChannel =
-  //   std::make_unique<flutter::EventChannel<EncodableValue>>(
-  //           registrar->messenger(), "flutter_reactive_ble_connected_device",
-  //           &flutter::StandardMethodCodec::GetInstance());
+  auto connectedChannel =
+    std::make_unique<flutter::EventChannel<EncodableValue>>(
+            registrar->messenger(), "flutter_reactive_ble_connected_device",
+            &flutter::StandardMethodCodec::GetInstance());
 
-  // auto characteristicChannel =
-  //   std::make_unique<flutter::EventChannel<EncodableValue>>(
-  //           registrar->messenger(), "flutter_reactive_ble_char_update",
-  //           &flutter::StandardMethodCodec::GetInstance());
+  auto characteristicChannel =
+    std::make_unique<flutter::EventChannel<EncodableValue>>(
+            registrar->messenger(), "flutter_reactive_ble_char_update",
+            &flutter::StandardMethodCodec::GetInstance());
 
-  // auto scanChannel = 
-  //   std::make_unique<flutter::EventChannel<EncodableValue>>(
-  //           registrar->messenger(), "flutter_reactive_ble_scan",
-  //           &flutter::StandardMethodCodec::GetInstance());
+  auto scanChannel = 
+    std::make_unique<flutter::EventChannel<EncodableValue>>(
+            registrar->messenger(), "flutter_reactive_ble_scan",
+            &flutter::StandardMethodCodec::GetInstance());
 
   auto statusChannel =
     std::make_unique<flutter::EventChannel<EncodableValue>>(
@@ -117,9 +117,9 @@ void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
         return plugin_pointer->OnCancel(arguments);
       });
   
-  // connectedChannel->SetStreamHandler(std::move(handler));
-  // characteristicChannel->SetStreamHandler(std::move(handler));
-  // scanChannel->SetStreamHandler(std::move(handler));
+  connectedChannel->SetStreamHandler(std::move(handler));
+  characteristicChannel->SetStreamHandler(std::move(handler));
+  scanChannel->SetStreamHandler(std::move(handler));
   statusChannel->SetStreamHandler(std::move(handler));
 
   registrar->AddPlugin(std::move(plugin));
@@ -160,11 +160,6 @@ void ReactiveBleWindowsPlugin::HandleMethodCall(
     result->Success(flutter::EncodableValue(version_stream.str()));
   } else if (method_call.method_name().compare("initialize") == 0) {
 
-
-
-
-
-
     // if (!bleWatcher) {
     //   bleWatcher = BluetoothLEAdvertisementWatcher();
     //   bluetoothLEWatcherReceivedToken = bleWatcher.Received({ this, &ReactiveBleWindowsPlugin::OnAdvertisementReceived });
@@ -178,10 +173,6 @@ void ReactiveBleWindowsPlugin::HandleMethodCall(
         bleWatcher.Received(bluetoothLEWatcherReceivedToken);
       }
     result->Success();  // TODO: Handle deinitialization
-
-
-
-
 
 
   } else {
