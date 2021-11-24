@@ -6,60 +6,79 @@ import 'converter/args_to_protubuf_converter.dart';
 import 'converter/protobuf_converter.dart';
 
 class ReactiveBleWindowsPlatform extends ReactiveBlePlatform {
-  ReactiveBleWindowsPlatform({
-    required ArgsToProtobufConverter argsToProtobufConverter,
-    required ProtobufConverter protobufConverter,
-    required MethodChannel bleMethodChannel,
-    required Stream<List<int>> connectedDeviceChannel,
-    required Stream<List<int>> charUpdateChannel,
-    required Stream<List<int>> bleDeviceScanChannel,
-    required Stream<List<int>> bleStatusChannel,
-  })  : _argsToProtobufConverter = argsToProtobufConverter,
+  ReactiveBleWindowsPlatform(
+      {required ArgsToProtobufConverter argsToProtobufConverter,
+      required ProtobufConverter protobufConverter,
+      required MethodChannel bleMethodChannel,
+      required Stream<List<int>> bleStatusChannel})
+      : _argsToProtobufConverter = argsToProtobufConverter,
         _protobufConverter = protobufConverter,
         _bleMethodChannel = bleMethodChannel,
-        _connectedDeviceRawStream = connectedDeviceChannel,
-        _charUpdateRawStream = charUpdateChannel,
-        _bleStatusRawChannel = bleStatusChannel,
-        _bleDeviceScanRawStream = bleDeviceScanChannel;
+        _bleStatusRawChannel = bleStatusChannel;
+  // ReactiveBleWindowsPlatform({
+  //   required ArgsToProtobufConverter argsToProtobufConverter,
+  //   required ProtobufConverter protobufConverter,
+  //   required MethodChannel bleMethodChannel,
+  //   required Stream<List<int>> connectedDeviceChannel,
+  //   required Stream<List<int>> charUpdateChannel,
+  //   required Stream<List<int>> bleDeviceScanChannel,
+  // })  : _argsToProtobufConverter = argsToProtobufConverter,
+  //       _protobufConverter = protobufConverter,
+  //       _bleMethodChannel = bleMethodChannel,
+  //       _connectedDeviceRawStream = connectedDeviceChannel,
+  //       _charUpdateRawStream = charUpdateChannel,
+  //       _bleDeviceScanRawStream = bleDeviceScanChannel;
 
   final ArgsToProtobufConverter _argsToProtobufConverter;
   final ProtobufConverter _protobufConverter;
   final MethodChannel _bleMethodChannel;
-  final Stream<List<int>> _connectedDeviceRawStream;
-  final Stream<List<int>> _charUpdateRawStream;
-  final Stream<List<int>> _bleDeviceScanRawStream;
+  // final Stream<List<int>> _connectedDeviceRawStream;
+  // final Stream<List<int>> _charUpdateRawStream;
+  // final Stream<List<int>> _bleDeviceScanRawStream;
   final Stream<List<int>> _bleStatusRawChannel;
 
-  Stream<ConnectionStateUpdate>? _connectionUpdateStream;
-  Stream<CharacteristicValue>? _charValueStream;
-  Stream<ScanResult>? _scanResultStream;
+  // Stream<ConnectionStateUpdate>? _connectionUpdateStream;
+  // Stream<CharacteristicValue>? _charValueStream;
+  // Stream<ScanResult>? _scanResultStream;
   Stream<BleStatus>? _bleStatusStream;
 
-  @override
-  Stream<ConnectionStateUpdate> get connectionUpdateStream =>
-      _connectionUpdateStream ??= _connectedDeviceRawStream
-          .map(_protobufConverter.connectionStateUpdateFrom)
-          .map(
-            (update) => update,
-          );
+  // @override
+  // Stream<ConnectionStateUpdate> get connectionUpdateStream =>
+  //     _connectionUpdateStream ??= _connectedDeviceRawStream
+  //         .map(_protobufConverter.connectionStateUpdateFrom)
+  //         .map(
+  //           (update) => update,
+  //         );
+
+  // @override
+  // Stream<CharacteristicValue> get charValueUpdateStream => _charValueStream ??=
+  //     _charUpdateRawStream.map(_protobufConverter.characteristicValueFrom).map(
+  //           (update) => update,
+  //         );
+
+  // @override
+  // Stream<ScanResult> get scanStream => _scanResultStream ??=
+  //     _bleDeviceScanRawStream.map(_protobufConverter.scanResultFrom).map(
+  //           (scanResult) => scanResult,
+  //         );
 
   @override
-  Stream<CharacteristicValue> get charValueUpdateStream => _charValueStream ??=
-      _charUpdateRawStream.map(_protobufConverter.characteristicValueFrom).map(
-            (update) => update,
-          );
+  Stream<BleStatus> get bleStatusStream {
+    _bleStatusRawChannel.map((x) {
+      print(x);
+      return BleStatus.ready;
+    });
+    return Stream<BleStatus>.periodic(
+        const Duration(seconds: 1), (x) => BleStatus.ready);
+    // .map(_protobufConverter.bleStatusFrom)
+    // .map((status) => status);
+  }
 
-  @override
-  Stream<ScanResult> get scanStream => _scanResultStream ??=
-      _bleDeviceScanRawStream.map(_protobufConverter.scanResultFrom).map(
-            (scanResult) => scanResult,
-          );
-
-  @override
-  Stream<BleStatus> get bleStatusStream =>
-      _bleStatusStream ??= _bleStatusRawChannel
-          .map(_protobufConverter.bleStatusFrom)
-          .map((status) => status);
+  // @override
+  // Stream<BleStatus> get bleStatusStream =>
+  //     _bleStatusStream ??= _bleStatusRawChannel
+  //         .map(_protobufConverter.bleStatusFrom)
+  //         .map((status) => status);
 
   @override
   Future<void> initialize() => _bleMethodChannel.invokeMethod("initialize");
@@ -232,26 +251,38 @@ class ReactiveBleWindowsPlatform extends ReactiveBlePlatform {
           .then((data) => _protobufConverter.discoveredServicesFrom(data!));
 }
 
+// class ReactiveBleWindowsPlatformFactory {
+//   const ReactiveBleWindowsPlatformFactory();
+
+//   ReactiveBleWindowsPlatform create() {
+//     const _bleMethodChannel = MethodChannel("flutter_reactive_ble_method");
+//     const connectedDeviceChannel =
+//         EventChannel("flutter_reactive_ble_connected_device");
+//     const charEventChannel = EventChannel("flutter_reactive_ble_char_update");
+//     const scanEventChannel = EventChannel("flutter_reactive_ble_scan");
+//     return ReactiveBleWindowsPlatform(
+//         protobufConverter: const ProtobufConverterImpl(),
+//         argsToProtobufConverter: const ArgsToProtobufConverterImpl(),
+//         bleMethodChannel: _bleMethodChannel,
+//         connectedDeviceChannel:
+//             connectedDeviceChannel.receiveBroadcastStream().cast<List<int>>(),
+//         charUpdateChannel:
+//             charEventChannel.receiveBroadcastStream().cast<List<int>>(),
+//         bleDeviceScanChannel:
+//             scanEventChannel.receiveBroadcastStream().cast<List<int>>(),
+//   }
+// }
+
 class ReactiveBleWindowsPlatformFactory {
   const ReactiveBleWindowsPlatformFactory();
 
   ReactiveBleWindowsPlatform create() {
     const _bleMethodChannel = MethodChannel("flutter_reactive_ble_method");
-    const connectedDeviceChannel =
-        EventChannel("flutter_reactive_ble_connected_device");
-    const charEventChannel = EventChannel("flutter_reactive_ble_char_update");
-    const scanEventChannel = EventChannel("flutter_reactive_ble_scan");
     const bleStatusChannel = EventChannel("flutter_reactive_ble_status");
     return ReactiveBleWindowsPlatform(
         protobufConverter: const ProtobufConverterImpl(),
         argsToProtobufConverter: const ArgsToProtobufConverterImpl(),
         bleMethodChannel: _bleMethodChannel,
-        connectedDeviceChannel:
-            connectedDeviceChannel.receiveBroadcastStream().cast<List<int>>(),
-        charUpdateChannel:
-            charEventChannel.receiveBroadcastStream().cast<List<int>>(),
-        bleDeviceScanChannel:
-            scanEventChannel.receiveBroadcastStream().cast<List<int>>(),
         bleStatusChannel:
             bleStatusChannel.receiveBroadcastStream().cast<List<int>>());
   }
