@@ -1,3 +1,4 @@
+#include "include/reactive_ble_windows/ble_status_handler.h"
 #include "include/reactive_ble_windows/reactive_ble_windows_plugin.h"
 
 // This must be included before many other Windows headers.
@@ -12,6 +13,7 @@
 #include <VersionHelpers.h>
 
 #include <flutter/event_channel.h>
+#include <flutter/event_stream_handler.h>
 #include <flutter/event_stream_handler_functions.h>
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
@@ -44,7 +46,6 @@ std::vector<uint8_t> to_bytevc(IBuffer buffer) {
 }
 
 class ReactiveBleWindowsPlugin : public flutter::Plugin, public flutter::StreamHandler<EncodableValue> {
-// class ReactiveBleWindowsPlugin : public flutter::Plugin {
  public:
   static void RegisterWithRegistrar(flutter::PluginRegistrarWindows *registrar);
 
@@ -116,11 +117,13 @@ void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
           -> std::unique_ptr<flutter::StreamHandlerError<>> {
         return plugin_pointer->OnCancel(arguments);
       });
-  
+
+  auto statusHandler = std::make_unique<flutter::BleStatusHandler<>>();
+
   connectedChannel->SetStreamHandler(std::move(handler));
   characteristicChannel->SetStreamHandler(std::move(handler));
   scanChannel->SetStreamHandler(std::move(handler));
-  statusChannel->SetStreamHandler(std::move(handler));
+  statusChannel->SetStreamHandler(std::move(statusHandler));
 
   registrar->AddPlugin(std::move(plugin));
 }
@@ -160,11 +163,11 @@ void ReactiveBleWindowsPlugin::HandleMethodCall(
     result->Success(flutter::EncodableValue(version_stream.str()));
   } else if (method_call.method_name().compare("initialize") == 0) {
 
-    // if (!bleWatcher) {
-    //   bleWatcher = BluetoothLEAdvertisementWatcher();
-    //   bluetoothLEWatcherReceivedToken = bleWatcher.Received({ this, &ReactiveBleWindowsPlugin::OnAdvertisementReceived });
-    // }
-    // bleWatcher.Start();
+    if (!bleWatcher) {
+      bleWatcher = BluetoothLEAdvertisementWatcher();
+      bluetoothLEWatcherReceivedToken = bleWatcher.Received({ this, &ReactiveBleWindowsPlugin::OnAdvertisementReceived });
+    }
+    bleWatcher.Start();
 
     result->Success();  // TODO: Handle initialization
   } else if (method_call.method_name().compare("deinitialize") == 0) {

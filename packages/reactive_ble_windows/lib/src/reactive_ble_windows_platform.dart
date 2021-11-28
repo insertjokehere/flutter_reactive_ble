@@ -55,18 +55,6 @@ class ReactiveBleWindowsPlatform extends ReactiveBlePlatform {
             (scanResult) => scanResult,
           );
 
-  // @override
-  // Stream<BleStatus> get bleStatusStream {
-  //   _bleStatusRawChannel.map((x) {
-  //     print(x);
-  //     return BleStatus.ready;
-  //   });
-  //   return Stream<BleStatus>.periodic(
-  //       const Duration(seconds: 1), (x) => BleStatus.ready);
-  //   // .map(_protobufConverter.bleStatusFrom)
-  //   // .map((status) => status);
-  // }
-
   @override
   Stream<BleStatus> get bleStatusStream =>
       _bleStatusStream ??= _bleStatusRawChannel
