@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
 set(PROJECT_NAME "reactive_ble_windows")
+set(ENV{CMAKE_TOOLCHAIN_FILE} "C:/Users/JuliaHarrison/Repos/vcpkg/scripts/buildsystems/vcpkg.cmake")
+set(VCPKG_MANIFEST_MODE "ON")
+set(VCPKG_MANIFEST_DIR "C:/Users/JuliaHarrison/Repos/flutter_reactive_ble/example")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
 # This value is used when generating builds using this plugin, so it must
@@ -15,7 +18,9 @@ set_target_properties(${PLUGIN_NAME} PROPERTIES
 target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
 target_include_directories(${PLUGIN_NAME} INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin)
+target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin ${Protobuf_LIBRARIES})
+
+# include_directories("C:/Users/JuliaHarrison/Repos/vcpkg/testapp/vcpkg_installed/x86-windows/include")
 
 # List of absolute paths to libraries that should be bundled with the plugin
 set(reactive_ble_windows_bundled_libraries

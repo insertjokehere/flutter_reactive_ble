@@ -25,6 +25,7 @@ brew isntall dart
 ```sh
 protoc --dart_out=../lib/src/generated ./bledata.proto
 protoc --swift_out=../ios/Classes/BleData ./bledata.proto
+protoc --cpp_out=../lib/src/generated ./bledata.proto
 ```
 
-NOTE: If directory `../lib/src/generated` does not exist please create it.
+NOTE: If directory `../lib/src/generated` or `./ios/Classes/BleData` does not exist please create it.

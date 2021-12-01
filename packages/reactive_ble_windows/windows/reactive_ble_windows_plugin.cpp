@@ -1,16 +1,13 @@
-#include "include/reactive_ble_windows/ble_status_handler.h"
 #include "include/reactive_ble_windows/reactive_ble_windows_plugin.h"
 
 // This must be included before many other Windows headers.
 #include <windows.h>
 #include <winrt/Windows.Devices.Bluetooth.h>
 #include <winrt/Windows.Devices.Bluetooth.Advertisement.h>
+#include <winrt/Windows.Devices.Radios.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Storage.Streams.h>
-
-// For getPlatformVersion; remove unless needed for your plugin implementation.
-#include <VersionHelpers.h>
 
 #include <flutter/event_channel.h>
 #include <flutter/event_stream_handler.h>
@@ -23,6 +20,8 @@
 #include <memory>
 #include <sstream>
 
+#include "ble_status_handler.cpp"
+
 namespace {
 
 using flutter::EncodableMap;
@@ -30,6 +29,7 @@ using flutter::EncodableValue;
 
 using namespace winrt::Windows::Devices::Bluetooth;
 using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
+// using namespace winrt::Windows::Devices::Radios;
 using namespace winrt::Windows::Foundation;
 using namespace winrt::Windows::Storage::Streams;
 
@@ -69,6 +69,9 @@ class ReactiveBleWindowsPlugin : public flutter::Plugin, public flutter::StreamH
   BluetoothLEAdvertisementWatcher bleWatcher{ nullptr };
   winrt::event_token bluetoothLEWatcherReceivedToken;
   std::unique_ptr<flutter::EventSink<EncodableValue>> scan_result_sink_;
+
+  // Radio bluetoothRadio{ nullptr };
+  // winrt::event_token radioStatusChangedToken;
 };
 
 void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
@@ -118,7 +121,7 @@ void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
         return plugin_pointer->OnCancel(arguments);
       });
 
-  auto statusHandler = std::make_unique<flutter::BleStatusHandler<>>();
+  auto statusHandler = std::make_unique<flutter::BleStatusHandlerImpl<>>();
 
   connectedChannel->SetStreamHandler(std::move(handler));
   characteristicChannel->SetStreamHandler(std::move(handler));
@@ -150,34 +153,19 @@ ReactiveBleWindowsPlugin::~ReactiveBleWindowsPlugin() {}
 void ReactiveBleWindowsPlugin::HandleMethodCall(
     const flutter::MethodCall<flutter::EncodableValue> &method_call,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  if (method_call.method_name().compare("getPlatformVersion") == 0) {
-    std::ostringstream version_stream;
-    version_stream << "Windows ";
-    if (IsWindows10OrGreater()) {
-      version_stream << "10+";
-    } else if (IsWindows8OrGreater()) {
-      version_stream << "8";
-    } else if (IsWindows7OrGreater()) {
-      version_stream << "7";
-    }
-    result->Success(flutter::EncodableValue(version_stream.str()));
-  } else if (method_call.method_name().compare("initialize") == 0) {
-
+  if (method_call.method_name().compare("initialize") == 0) {
     if (!bleWatcher) {
       bleWatcher = BluetoothLEAdvertisementWatcher();
       bluetoothLEWatcherReceivedToken = bleWatcher.Received({ this, &ReactiveBleWindowsPlugin::OnAdvertisementReceived });
     }
     bleWatcher.Start();
-
-    result->Success();  // TODO: Handle initialization
+    result->Success();
   } else if (method_call.method_name().compare("deinitialize") == 0) {
     if (bleWatcher) {
-        bleWatcher.Stop();
-        bleWatcher.Received(bluetoothLEWatcherReceivedToken);
-      }
-    result->Success();  // TODO: Handle deinitialization
-
-
+      bleWatcher.Stop();
+      bleWatcher.Received(bluetoothLEWatcherReceivedToken);
+    }
+    result->Success();
   } else {
     result->NotImplemented();
   }
@@ -208,16 +196,16 @@ std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> ReactiveBleWindowsP
 void ReactiveBleWindowsPlugin::OnAdvertisementReceived(
     BluetoothLEAdvertisementWatcher watcher,
     BluetoothLEAdvertisementReceivedEventArgs args) {
-  // OutputDebugString((L"Received " + winrt::to_hstring(args.BluetoothAddress()) + L", Name:" + winrt::to_hstring(args.Advertisement().LocalName()) + L"\n").c_str());
-  // auto manufacturer_data = parseManufacturerData(args.Advertisement());
-  // if (scan_result_sink_) {
-  //   scan_result_sink_->Success(EncodableMap{
-  //     {"name", winrt::to_string(args.Advertisement().LocalName())},
-  //     {"deviceId", std::to_string(args.BluetoothAddress())},
-  //     {"manufacturerData", manufacturer_data},
-  //     {"rssi", args.RawSignalStrengthInDBm()},
-  //   });
-  // }
+  // std::cout << winrt::to_string(args.Advertisement().LocalName()) << std::endl;
+  auto manufacturer_data = parseManufacturerData(args.Advertisement());
+  if (scan_result_sink_) {
+    scan_result_sink_->Success(EncodableMap{
+      {"name", winrt::to_string(args.Advertisement().LocalName())},
+      {"deviceId", std::to_string(args.BluetoothAddress())},
+      {"manufacturerData", manufacturer_data},
+      {"rssi", args.RawSignalStrengthInDBm()},
+    });
+  }
 }
 
 

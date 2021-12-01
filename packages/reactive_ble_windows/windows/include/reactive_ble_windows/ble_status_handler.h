@@ -20,19 +20,18 @@ class BleStatusHandler : public StreamHandler<T> {
   BleStatusHandler(BleStatusHandler const&) = delete;
   BleStatusHandler& operator=(BleStatusHandler const&) = delete;
 
- protected:
-  std::unique_ptr<StreamHandlerError<T>> OnListenInternal(
-      const T* arguments,
-      std::unique_ptr<EventSink<T>>&& events) override {
-    std::cout << "+++++++++++ ON LISTEN INTERNAL +++++++++++\n" << std::endl;
-    return nullptr;
-  }
+  std::unique_ptr<flutter::EventSink<EncodableValue>> status_result_sink_;
 
-  std::unique_ptr<StreamHandlerError<T>> OnCancelInternal(
-      const T* arguments) override {
-    std::cout << "========= ON CANCEL INTERNAL ==============\n" << std::endl;
-    return nullptr;
-  }
+ protected:
+  virtual std::unique_ptr<StreamHandlerError<T>> OnListenInternal(
+    const T* arguments,
+    std::unique_ptr<EventSink<T>>&& events) = 0;
+
+  virtual std::unique_ptr<StreamHandlerError<T>> OnCancelInternal(
+      const T* arguments) = 0;
+
+ private:
+  virtual void listenToBleStatus() = 0;
 };
 
 }  // namespace flutter
