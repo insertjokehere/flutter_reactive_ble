@@ -1,5 +1,5 @@
 #include "include/reactive_ble_windows/reactive_ble_windows_plugin.h"
-
+#pragma comment( lib, "windowsapp")
 // This must be included before many other Windows headers.
 #include <windows.h>
 #include <winrt/Windows.Devices.Bluetooth.h>
