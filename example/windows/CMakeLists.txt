@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
+
+set(CMAKE_TOOLCHAIN_FILE "C:/users/tobia/Projects/vcpkg/scripts/buildsystems/vcpkg.cmake")
+set(VCPKG_FEATURE_FLAGS versions)
+
 project(example LANGUAGES CXX)
 
 set(BINARY_NAME "example")
@@ -26,13 +30,18 @@ set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE}")
 set(CMAKE_C_FLAGS_PROFILE "${CMAKE_C_FLAGS_RELEASE}")
 set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 
+find_package(protobuf CONFIG REQUIRED)
+# It would make a lot more sense to use environment variables to specify the path to the next directory here,
+# but this works just as well in the meantime.
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../build/windows/vcpkg_installed/x64-windows/include")
+
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
 # Compilation settings that should be applied to most targets.
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_17)
-  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
+  target_compile_options(${TARGET} PRIVATE /W4 /wd"4100")
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
