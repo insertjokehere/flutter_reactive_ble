@@ -1,5 +1,5 @@
-#include "include/reactive_ble_windows/ble_status_handler.h"
 #include "../lib/src/generated/bledata.pb.h"
+#include "include/reactive_ble_windows/ble_status_handler.h"
 
 namespace flutter {
 
@@ -12,7 +12,7 @@ class BleStatusHandlerImpl : public BleStatusHandler<T> {
     std::cout << "+++++++++++ ON LISTEN INTERNAL +++++++++++\n" << std::endl;  // Debugging
 
     status_result_sink_ = std::move(events);
-    // listenToBleStatus();
+    listenToBleStatus();
     return nullptr;
   }
 
@@ -26,7 +26,9 @@ class BleStatusHandlerImpl : public BleStatusHandler<T> {
 
  private:
   void listenToBleStatus() {
-    // status_result_sink_->Success(EncodableMap{"status", "5"});
+    BleStatusInfo msg;
+    msg.set_status(1);
+    std::cout << "========= DOING STUFF ==============\n" << std::endl;  // Debugging
   }
 };
 
