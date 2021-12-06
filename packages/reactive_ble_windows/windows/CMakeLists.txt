@@ -16,7 +16,7 @@ target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
 target_include_directories(${PLUGIN_NAME} INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
-SET(PROTO_DIR "C:/Users/tobia/Projects/flutter_reactive_ble/packages/reactive_ble_windows/lib/src/generated")
+SET(PROTO_DIR "C:/Users/JuliaHarrison/Repos/flutter_reactive_ble/packages/reactive_ble_windows/lib/src/generated")
 ADD_LIBRARY(proto "${PROTO_DIR}/bledata.pb.h" "${PROTO_DIR}/bledata.pb.cc")
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite proto)
 

@@ -247,7 +247,11 @@ class ReactiveBleWindowsPlatformFactory {
       argsToProtobufConverter: const ArgsToProtobufConverterImpl(),
       bleMethodChannel: _bleMethodChannel,
       bleStatusChannel:
-          bleStatusChannel.receiveBroadcastStream().cast<List<int>>(),
+          bleStatusChannel.receiveBroadcastStream().map<List<int>>((e) {
+        List<int> result = [];
+        e.forEach((value) => result.add(value));
+        return result;
+      }),
       connectedDeviceChannel:
           connectedDeviceChannel.receiveBroadcastStream().cast<List<int>>(),
       charUpdateChannel:

@@ -23,11 +23,11 @@ class BleStatusHandler : public StreamHandler<T> {
   std::unique_ptr<flutter::EventSink<EncodableValue>> status_result_sink_;
 
  protected:
-  virtual std::unique_ptr<StreamHandlerError<T>> OnListenInternal(
+  virtual std::unique_ptr<StreamHandlerError<>> OnListenInternal(
     const T* arguments,
     std::unique_ptr<EventSink<T>>&& events) = 0;
 
-  virtual std::unique_ptr<StreamHandlerError<T>> OnCancelInternal(
+  virtual std::unique_ptr<StreamHandlerError<>> OnCancelInternal(
       const T* arguments) = 0;
 
  private:

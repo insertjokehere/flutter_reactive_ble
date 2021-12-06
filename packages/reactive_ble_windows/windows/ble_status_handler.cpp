@@ -26,9 +26,27 @@ class BleStatusHandlerImpl : public BleStatusHandler<T> {
 
  private:
   void listenToBleStatus() {
+    std::cout << "========= LISTEN TO BLE STATUS ==============\n" << std::endl;  // Debugging
     BleStatusInfo msg;
-    msg.set_status(1);
-    std::cout << "========= DOING STUFF ==============\n" << std::endl;  // Debugging
+    msg.set_status(5);  // TODO: obtain system's actual bluetooth status
+
+    size_t size = msg.ByteSizeLong();
+    uint8_t *buffer = (uint8_t*) malloc(size);
+    bool success = msg.SerializeToArray(buffer, size);
+    if (!success) {
+      std::cout << "Failed to serialize message into buffer." << std::endl;  // Debugging
+      free(buffer);
+      return;
+    }
+
+    EncodableList result;
+    for(uint32_t i = 0; i < size; i++) {
+      uint8_t value = buffer[i];
+      EncodableValue encodedVal = (EncodableValue) value;
+      result.push_back(encodedVal);
+    }
+    status_result_sink_->EventSink::Success(result);
+    free(buffer);
   }
 };
 
