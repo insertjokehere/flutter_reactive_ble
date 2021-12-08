@@ -1,5 +1,6 @@
 #include "include/reactive_ble_windows/reactive_ble_windows_plugin.h"
 #pragma comment( lib, "windowsapp")
+
 // This must be included before many other Windows headers.
 #include <windows.h>
 #include <winrt/Windows.Devices.Bluetooth.h>
@@ -29,7 +30,6 @@ using flutter::EncodableValue;
 
 using namespace winrt::Windows::Devices::Bluetooth;
 using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
-// using namespace winrt::Windows::Devices::Radios;
 using namespace winrt::Windows::Foundation;
 using namespace winrt::Windows::Storage::Streams;
 
@@ -69,9 +69,6 @@ class ReactiveBleWindowsPlugin : public flutter::Plugin, public flutter::StreamH
   BluetoothLEAdvertisementWatcher bleWatcher{ nullptr };
   winrt::event_token bluetoothLEWatcherReceivedToken;
   std::unique_ptr<flutter::EventSink<EncodableValue>> scan_result_sink_;
-
-  // Radio bluetoothRadio{ nullptr };
-  // winrt::event_token radioStatusChangedToken;
 };
 
 void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
@@ -158,7 +155,6 @@ void ReactiveBleWindowsPlugin::HandleMethodCall(
       bleWatcher = BluetoothLEAdvertisementWatcher();
       bluetoothLEWatcherReceivedToken = bleWatcher.Received({ this, &ReactiveBleWindowsPlugin::OnAdvertisementReceived });
     }
-    bleWatcher.Start();
     result->Success();
   } else if (method_call.method_name().compare("deinitialize") == 0) {
     if (bleWatcher) {
@@ -196,7 +192,7 @@ std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> ReactiveBleWindowsP
 void ReactiveBleWindowsPlugin::OnAdvertisementReceived(
     BluetoothLEAdvertisementWatcher watcher,
     BluetoothLEAdvertisementReceivedEventArgs args) {
-  // std::cout << winrt::to_string(args.Advertisement().LocalName()) << std::endl;
+  // std::cout << winrt::to_string(args.Advertisement().LocalName()) << std::endl;  // Debugging
   auto manufacturer_data = parseManufacturerData(args.Advertisement());
   if (scan_result_sink_) {
     scan_result_sink_->Success(EncodableMap{
@@ -207,7 +203,6 @@ void ReactiveBleWindowsPlugin::OnAdvertisementReceived(
     });
   }
 }
-
 
 }  // namespace
 

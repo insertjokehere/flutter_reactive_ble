@@ -3,33 +3,44 @@
 
 namespace flutter {
 
+using namespace winrt::Windows::Foundation;
+using namespace winrt::Windows::Devices::Radios;
+
 template <typename T = EncodableValue>
 class BleStatusHandlerImpl : public BleStatusHandler<T> {
+ public:
+  void BleStatusChangedHandler(Radio const& sender, IInspectable const& args) {
+      RadioState state = sender.State();
+      BleStatusInfo status = RadioStateToBleStatus(state);
+      SendBleStatus(status);
+  }
+
  protected:
   std::unique_ptr<StreamHandlerError<T>> OnListenInternal(
       const T* arguments,
       std::unique_ptr<EventSink<T>>&& events) override {
-    std::cout << "+++++++++++ ON LISTEN INTERNAL +++++++++++\n" << std::endl;  // Debugging
-
     status_result_sink_ = std::move(events);
-    listenToBleStatus();
+    InitializeBleAsync();
     return nullptr;
   }
 
   std::unique_ptr<StreamHandlerError<T>> OnCancelInternal(
       const T* arguments) override {
-    std::cout << "========= ON CANCEL INTERNAL ==============\n" << std::endl;  // Debugging
-
     status_result_sink_ = nullptr;
     return nullptr;
   }
 
  private:
-  void listenToBleStatus() {
-    std::cout << "========= LISTEN TO BLE STATUS ==============\n" << std::endl;  // Debugging
-    BleStatusInfo msg;
-    msg.set_status(5);  // TODO: obtain system's actual bluetooth status
+  winrt::fire_and_forget InitializeBleAsync() {
+    //TODO: Is it worth checking to see if the bluetooth radio does not already exist?
+    auto bluetoothAdapter = co_await BluetoothAdapter::GetDefaultAsync();
+    bluetoothRadio = co_await bluetoothAdapter.GetRadioAsync();
+    bluetoothRadio.StateChanged({this, &BleStatusHandler::BleStatusChangedHandler});
+    BleStatusInfo state = RadioStateToBleStatus(bluetoothRadio.State());
+    SendBleStatus(state);
+  }
 
+  void SendBleStatus(BleStatusInfo msg) {
     size_t size = msg.ByteSizeLong();
     uint8_t *buffer = (uint8_t*) malloc(size);
     bool success = msg.SerializeToArray(buffer, size);
@@ -47,6 +58,30 @@ class BleStatusHandlerImpl : public BleStatusHandler<T> {
     }
     status_result_sink_->EventSink::Success(result);
     free(buffer);
+  }
+
+  static BleStatusInfo RadioStateToBleStatus(RadioState state) {
+    BleStatusInfo status;
+    switch(state) {
+      case RadioState::Unknown:
+        status.set_status((BleStatus) unknown);
+        break;
+      case RadioState::On:
+        status.set_status((BleStatus) ready);
+        break;
+      case RadioState::Off:
+        status.set_status((BleStatus) poweredOff);
+        break;
+      case RadioState::Disabled:
+        status.set_status((BleStatus) unsupported);
+        break;
+      default:
+        // The default case should not be reached, unless the
+        // RadioState enum structure gets changed.
+        status.set_status((BleStatus) unknown);
+        break;
+    }
+    return status;
   }
 };
 
