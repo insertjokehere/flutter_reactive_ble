@@ -21,7 +21,7 @@
 #include <memory>
 #include <sstream>
 
-#include "ble_status_handler.cpp"
+#include "include/reactive_ble_windows/ble_status_handler.h"
 
 namespace {
 
@@ -118,7 +118,7 @@ void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
         return plugin_pointer->OnCancel(arguments);
       });
 
-  auto statusHandler = std::make_unique<flutter::BleStatusHandlerImpl<>>();
+  auto statusHandler = std::make_unique<flutter::BleStatusHandler>();
 
   connectedChannel->SetStreamHandler(std::move(handler));
   characteristicChannel->SetStreamHandler(std::move(handler));
@@ -128,8 +128,7 @@ void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
   registrar->AddPlugin(std::move(plugin));
 }
 
-std::vector<uint8_t> parseManufacturerData(BluetoothLEAdvertisement advertisement)
-{
+std::vector<uint8_t> parseManufacturerData(BluetoothLEAdvertisement advertisement) {
   if (advertisement.ManufacturerData().Size() == 0)
     return std::vector<uint8_t>();
 
@@ -168,8 +167,7 @@ void ReactiveBleWindowsPlugin::HandleMethodCall(
 }
 
 std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> ReactiveBleWindowsPlugin::OnListenInternal(
-    const EncodableValue* arguments, std::unique_ptr<flutter::EventSink<EncodableValue>>&& events)
-{
+    const EncodableValue* arguments, std::unique_ptr<flutter::EventSink<EncodableValue>>&& events) {
   auto args = std::get<EncodableMap>(*arguments);
   auto name = std::get<std::string>(args[EncodableValue("name")]);
   if (name.compare("scanResult") == 0) {
@@ -179,8 +177,7 @@ std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> ReactiveBleWindowsP
 }
 
 std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> ReactiveBleWindowsPlugin::OnCancelInternal(
-    const EncodableValue* arguments)
-{
+    const EncodableValue* arguments) {
   auto args = std::get<EncodableMap>(*arguments);
   auto name = std::get<std::string>(args[EncodableValue("name")]);
   if (name.compare("scanResult") == 0) {

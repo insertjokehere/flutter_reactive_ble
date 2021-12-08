@@ -7,7 +7,7 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 set(PLUGIN_NAME "reactive_ble_windows_plugin")
 
 add_library(${PLUGIN_NAME} SHARED
-  "reactive_ble_windows_plugin.cpp"
+  "reactive_ble_windows_plugin.cpp" "ble_status_handler.cpp"
 )
 apply_standard_settings(${PLUGIN_NAME})
 set_target_properties(${PLUGIN_NAME} PROPERTIES
@@ -19,8 +19,6 @@ target_include_directories(${PLUGIN_NAME} INTERFACE
 SET(PROTO_DIR "C:/Users/JuliaHarrison/Repos/flutter_reactive_ble/packages/reactive_ble_windows/lib/src/generated")
 ADD_LIBRARY(proto "${PROTO_DIR}/bledata.pb.h" "${PROTO_DIR}/bledata.pb.cc")
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite proto)
-
-# include_directories("C:/Users/JuliaHarrison/Repos/vcpkg/testapp/vcpkg_installed/x86-windows/include")
 
 # List of absolute paths to libraries that should be bundled with the plugin
 set(reactive_ble_windows_bundled_libraries
