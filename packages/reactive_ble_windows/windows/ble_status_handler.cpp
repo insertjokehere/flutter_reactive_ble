@@ -7,7 +7,6 @@ namespace flutter {
 
 using namespace winrt::Windows::Foundation;
 using namespace winrt::Windows::Foundation::Collections;
-using namespace winrt::Windows::Storage::Streams;
 using namespace winrt::Windows::Devices::Radios;
 using namespace winrt::Windows::Devices::Bluetooth;
 

@@ -21,7 +21,7 @@ PROTOBUF_GENERATE_CPP(PROTO_SRC PROTO_HEADER "../protos/bledata.proto")
 ADD_LIBRARY(proto ${PROTO_HEADER} ${PROTO_SRC})
 
 add_library(${PLUGIN_NAME} SHARED
-  "reactive_ble_windows_plugin.cpp" "ble_status_handler.cpp"
+  "reactive_ble_windows_plugin.cpp" "ble_status_handler.cpp" "ble_char_handler.cpp" "ble_connected_handler.cpp"
 )
 apply_standard_settings(${PLUGIN_NAME})
 set_target_properties(${PLUGIN_NAME} PROPERTIES
