@@ -73,7 +73,8 @@ class ReactiveBleWindowsPlugin : public flutter::Plugin, public flutter::StreamH
 
   void SendDeviceScanInfo(DeviceScanInfo msg);
 
-  BluetoothLEAdvertisementWatcher bleWatcher{ nullptr };
+  bool initialized = false;
+  BluetoothLEAdvertisementWatcher bleWatcher = nullptr;
   winrt::event_token bluetoothLEWatcherReceivedToken;
   std::unique_ptr<flutter::EventSink<EncodableValue>> scan_result_sink_;
 };
@@ -153,16 +154,20 @@ std::vector<uint8_t> parseManufacturerData(BluetoothLEAdvertisement advertisemen
 
 ReactiveBleWindowsPlugin::ReactiveBleWindowsPlugin() {}
 
-ReactiveBleWindowsPlugin::~ReactiveBleWindowsPlugin() {}
+ReactiveBleWindowsPlugin::~ReactiveBleWindowsPlugin() {
+  if (bleWatcher) {
+    bleWatcher.Stop();
+    bleWatcher.Received(bluetoothLEWatcherReceivedToken);
+    bleWatcher = nullptr;
+  }
+}
 
 void ReactiveBleWindowsPlugin::HandleMethodCall(
     const flutter::MethodCall<flutter::EncodableValue> &method_call,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   if (method_call.method_name().compare("initialize") == 0) {
-    if (!bleWatcher) {
-      bleWatcher = BluetoothLEAdvertisementWatcher();
-      bluetoothLEWatcherReceivedToken = bleWatcher.Received({ this, &ReactiveBleWindowsPlugin::OnAdvertisementReceived });
-    }
+    bleWatcher = BluetoothLEAdvertisementWatcher();
+    bluetoothLEWatcherReceivedToken = bleWatcher.Received({ this, &ReactiveBleWindowsPlugin::OnAdvertisementReceived });
     result->Success();
   } else if (method_call.method_name().compare("deinitialize") == 0) {
     if (bleWatcher) {
@@ -182,16 +187,17 @@ void ReactiveBleWindowsPlugin::HandleMethodCall(
 std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> ReactiveBleWindowsPlugin::OnListenInternal(
     const EncodableValue* arguments, std::unique_ptr<flutter::EventSink<EncodableValue>>&& events) {
   scan_result_sink_ = std::move(events);
-  if (bleWatcher) {
+  if (bleWatcher.Status() != BluetoothLEAdvertisementWatcherStatus::Started) {
     bleWatcher.Start();
   }
+  initialized = true;
   return nullptr;
 }
 
 std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> ReactiveBleWindowsPlugin::OnCancelInternal(
     const EncodableValue* arguments) {
   scan_result_sink_ = nullptr;
-  if (bleWatcher) {
+  if (initialized && bleWatcher.Status() == BluetoothLEAdvertisementWatcherStatus::Started) {
     bleWatcher.Stop();
   }
   return nullptr;
