@@ -27,6 +27,8 @@ class BleConnectedHandler : public StreamHandler<EncodableValue> {
   BleConnectedHandler(BleConnectedHandler const&) = delete;
   BleConnectedHandler& operator=(BleConnectedHandler const&) = delete;
 
+  std::unique_ptr<flutter::EventSink<EncodableValue>> connected_device_sink_;
+
  protected:
   
   virtual std::unique_ptr<StreamHandlerError<>> OnListenInternal(

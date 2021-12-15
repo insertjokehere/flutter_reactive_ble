@@ -20,11 +20,13 @@
 #include <map>
 #include <memory>
 #include <sstream>
+#include <variant>
 
 #include "../lib/src/generated/bledata.pb.h"
 #include "include/reactive_ble_windows/ble_connected_handler.h"
 #include "include/reactive_ble_windows/ble_char_handler.h"
 #include "include/reactive_ble_windows/ble_status_handler.h"
+// #include "bluetooth_device_agent.cpp"
 
 namespace {
 
@@ -53,7 +55,7 @@ class ReactiveBleWindowsPlugin : public flutter::Plugin, public flutter::StreamH
  public:
   static void RegisterWithRegistrar(flutter::PluginRegistrarWindows *registrar);
 
-  ReactiveBleWindowsPlugin();
+  ReactiveBleWindowsPlugin(flutter::PluginRegistrarWindows *registrar);
 
   virtual ~ReactiveBleWindowsPlugin();
 
@@ -73,10 +75,16 @@ class ReactiveBleWindowsPlugin : public flutter::Plugin, public flutter::StreamH
 
   void SendDeviceScanInfo(DeviceScanInfo msg);
 
+  // winrt::fire_and_forget ConnectAsync(uint64_t addr);
+  // void BluetoothLEDevice_ConnectionStatusChanged(BluetoothLEDevice sender, IInspectable args);
+  // void CleanConnection(uint64_t bluetoothAddress);
+  // std::map<uint64_t, std::unique_ptr<BluetoothDeviceAgent>> connectedDevices{};
+
   bool initialized = false;
   BluetoothLEAdvertisementWatcher bleWatcher = nullptr;
   winrt::event_token bluetoothLEWatcherReceivedToken;
   std::unique_ptr<flutter::EventSink<EncodableValue>> scan_result_sink_;
+  std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> connectedHandler;
 };
 
 void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
@@ -106,7 +114,7 @@ void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
             registrar->messenger(), "flutter_reactive_ble_status",
             &flutter::StandardMethodCodec::GetInstance());
 
-  auto plugin = std::make_unique<ReactiveBleWindowsPlugin>();
+  auto plugin = std::make_unique<ReactiveBleWindowsPlugin>(registrar);
 
   methodChannel->SetMethodCallHandler(
       [plugin_pointer = plugin.get()](const auto &call, auto result) {
@@ -126,11 +134,9 @@ void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
         return plugin_pointer->OnCancel(arguments);
       });
 
-  auto connectedHandler = std::make_unique<flutter::BleConnectedHandler>();
   auto charHandler = std::make_unique<flutter::BleCharHandler>();
   auto statusHandler = std::make_unique<flutter::BleStatusHandler>();
 
-  connectedChannel->SetStreamHandler(std::move(connectedHandler));
   characteristicChannel->SetStreamHandler(std::move(charHandler));
   scanChannel->SetStreamHandler(std::move(handler));
   statusChannel->SetStreamHandler(std::move(statusHandler));
@@ -152,7 +158,14 @@ std::vector<uint8_t> parseManufacturerData(BluetoothLEAdvertisement advertisemen
   return result;
 }
 
-ReactiveBleWindowsPlugin::ReactiveBleWindowsPlugin() {}
+ReactiveBleWindowsPlugin::ReactiveBleWindowsPlugin(flutter::PluginRegistrarWindows *registrar) {
+  auto connectedChannel =
+    std::make_unique<flutter::EventChannel<EncodableValue>>(
+            registrar->messenger(), "flutter_reactive_ble_connected_device",
+            &flutter::StandardMethodCodec::GetInstance());
+  connectedHandler = std::make_unique<flutter::BleConnectedHandler>();
+  connectedChannel->SetStreamHandler(std::move(connectedHandler));
+}
 
 ReactiveBleWindowsPlugin::~ReactiveBleWindowsPlugin() {
   if (bleWatcher) {
@@ -165,21 +178,54 @@ ReactiveBleWindowsPlugin::~ReactiveBleWindowsPlugin() {
 void ReactiveBleWindowsPlugin::HandleMethodCall(
     const flutter::MethodCall<flutter::EncodableValue> &method_call,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  if (method_call.method_name().compare("initialize") == 0) {
+  std::string methodName = method_call.method_name();
+  if (methodName.compare("initialize") == 0) {
     bleWatcher = BluetoothLEAdvertisementWatcher();
     bluetoothLEWatcherReceivedToken = bleWatcher.Received({ this, &ReactiveBleWindowsPlugin::OnAdvertisementReceived });
     result->Success();
-  } else if (method_call.method_name().compare("deinitialize") == 0) {
+  } else if (methodName.compare("deinitialize") == 0) {
     if (bleWatcher) {
       bleWatcher.Stop();
       bleWatcher.Received(bluetoothLEWatcherReceivedToken);
     }
     result->Success();
-  } else if (method_call.method_name().compare("scanForDevices") == 0) {
+  } else if (methodName.compare("scanForDevices") == 0) {
+    //TODO: Use scan parameters (List<Uuid> withServices, ScanMode scanMode, bool requireLocationServicesEnabled)?
     bleWatcher.Start();
     result->Success();
+  } else if (methodName.compare("connectToDevice") == 0) {
+    ConnectToDeviceRequest req;
+
+    // std::get_if returns a pointer to the value stored or a null pointer on error. 
+    // This ensures we return early if we get a null pointer.
+    const flutter::EncodableValue* pEncodableValue = method_call.arguments();
+    const std::vector<uint8_t>* pVector = std::get_if<std::vector<uint8_t>>(pEncodableValue);
+    if (pVector && pVector->size() > 0) {
+      // Parse vector into a protobuf message. Note the call to `pVector->data()` (https://en.cppreference.com/w/cpp/container/vector/data),
+      // and note further that this may return a null pointer if pVector->size() is 0.
+      bool res = req.ParsePartialFromArray(pVector->data(), pVector->size());
+      if (res) {
+
+        std::cout << "Connect to device request: " << req.DebugString() << std::flush;  // Apparently includes a newline char.
+        uint64_t addr = std::stoull(req.deviceid());
+        // ConnectAsync(addr);
+
+      } else {
+        result->Error("Unable to parse message");
+        return;
+      }
+    } else {
+      result->Error("No data");
+      return;
+    }
+
+    result->Success();
+  } else if (methodName.compare("disconnectFromDevice") == 0) {
+    // deviceId
+    //TODO: Implement disconnect from device
+    result->NotImplemented();
   } else {
-    std::cout << "Unknown method: " << method_call.method_name() << std::endl;  // Debugging
+    std::cout << "Unknown method: " << methodName << std::endl;  // Debugging
     result->NotImplemented();
   }
 }
@@ -240,6 +286,51 @@ void ReactiveBleWindowsPlugin::SendDeviceScanInfo(DeviceScanInfo msg) {
   scan_result_sink_->EventSink::Success(result);
   free(buffer);
 }
+
+// winrt::fire_and_forget ReactiveBleWindowsPlugin::ConnectAsync(uint64_t addr) {
+//   auto device = co_await BluetoothLEDevice::FromBluetoothAddressAsync(addr);
+//   auto servicesResult = co_await device.GetGattServicesAsync();
+//   if (servicesResult.Status() != GattCommunicationStatus::Success) {
+//     OutputDebugString((L"GetGattServicesAsync error: " + winrt::to_hstring((int32_t)servicesResult.Status()) + L"\n").c_str());
+//     // connected_device_sink_->Send(EncodableMap{
+//     //       {"deviceId", std::to_string(addr)},
+//     //       {"ConnectionState", "disconnected"},
+//     // });
+//     co_return;
+//   }
+//   auto connnectionStatusChangedToken = device.ConnectionStatusChanged({this, &ReactiveBleWindowsPlugin::BluetoothLEDevice_ConnectionStatusChanged});
+//   auto deviceAgent = std::make_unique<BluetoothDeviceAgent>(device, connnectionStatusChangedToken);
+//   auto pair = std::make_pair(addr, std::move(deviceAgent));
+//   connectedDevices.insert(std::move(pair));
+//   // connected_device_sink_->Send(EncodableMap{
+//   //       {"deviceId", std::to_string(addr)},
+//   //       {"ConnectionState", "connected"},
+//   // });
+// }
+
+
+// void ReactiveBleWindowsPlugin::BluetoothLEDevice_ConnectionStatusChanged(BluetoothLEDevice sender, IInspectable args) {
+//   OutputDebugString((L"ConnectionStatusChanged " + winrt::to_hstring((int32_t)sender.ConnectionStatus()) + L"\n").c_str());
+//   if (sender.ConnectionStatus() == BluetoothConnectionStatus::Disconnected) {
+//     CleanConnection(sender.BluetoothAddress());
+//     // connected_device_sink_->Send(EncodableMap{
+//     //       {"deviceId", std::to_string(addr)},
+//     //       {"ConnectionState", "disconnected"},
+//     // });
+//   }
+// }
+
+// void ReactiveBleWindowsPlugin::CleanConnection(uint64_t bluetoothAddress) {
+//   auto node = connectedDevices.extract(bluetoothAddress);
+//   if (!node.empty()) {
+//     auto deviceAgent = std::move(node.mapped());
+//     deviceAgent->device.ConnectionStatusChanged(deviceAgent->connnectionStatusChangedToken);
+//     for (auto &tokenPair : deviceAgent->valueChangedTokens)
+//     {
+//       deviceAgent->gattCharacteristics.at(tokenPair.first).ValueChanged(tokenPair.second);
+//     }
+//   }
+// }
 
 }  // namespace
 

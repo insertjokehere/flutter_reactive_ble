@@ -14,12 +14,16 @@ using namespace winrt::Windows::Storage::Streams;
 
 std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleConnectedHandler::OnListenInternal(
     const EncodableValue* arguments, std::unique_ptr<flutter::EventSink<EncodableValue>>&& events) {
-  return nullptr;
+      std::cout << "Connected Handler: OnListenInternal" << std::endl;
+      connected_device_sink_ = std::move(events);
+      return nullptr;
 }
 
 std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleConnectedHandler::OnCancelInternal(
     const EncodableValue* arguments) {
-  return nullptr;
+      std::cout << "Connected Handler: OnCancelInternal" << std::endl;
+      connected_device_sink_ = nullptr;
+      return nullptr;
 }
 
 }
