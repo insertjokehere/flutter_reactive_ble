@@ -25,6 +25,7 @@
 #include "../lib/src/generated/bledata.pb.h"
 #include "include/reactive_ble_windows/ble_connected_handler.h"
 #include "include/reactive_ble_windows/ble_char_handler.h"
+#include "include/reactive_ble_windows/ble_scan_handler.h"
 #include "include/reactive_ble_windows/ble_status_handler.h"
 // #include "bluetooth_device_agent.cpp"
 
@@ -39,19 +40,7 @@ using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
 using namespace winrt::Windows::Foundation;
 using namespace winrt::Windows::Storage::Streams;
 
-union uint16_t_union {
-  uint16_t uint16;
-  byte bytes[sizeof(uint16_t)];
-};
-
-std::vector<uint8_t> to_bytevc(IBuffer buffer) {
-  auto reader = DataReader::FromBuffer(buffer);
-  auto result = std::vector<uint8_t>(reader.UnconsumedBufferLength());
-  reader.ReadBytes(result);
-  return result;
-}
-
-class ReactiveBleWindowsPlugin : public flutter::Plugin, public flutter::StreamHandler<EncodableValue> {
+class ReactiveBleWindowsPlugin : public flutter::Plugin {
  public:
   static void RegisterWithRegistrar(flutter::PluginRegistrarWindows *registrar);
 
@@ -63,27 +52,13 @@ class ReactiveBleWindowsPlugin : public flutter::Plugin, public flutter::StreamH
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue> &method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
-
-  void OnAdvertisementReceived(BluetoothLEAdvertisementWatcher watcher, BluetoothLEAdvertisementReceivedEventArgs args);
-
-  std::unique_ptr<flutter::StreamHandlerError<>> OnListenInternal(
-      const EncodableValue* arguments,
-      std::unique_ptr<flutter::EventSink<>>&& events) override;
-
-  std::unique_ptr<flutter::StreamHandlerError<>> OnCancelInternal(
-      const EncodableValue* arguments) override;
-
-  void SendDeviceScanInfo(DeviceScanInfo msg);
-
+  
   // winrt::fire_and_forget ConnectAsync(uint64_t addr);
   // void BluetoothLEDevice_ConnectionStatusChanged(BluetoothLEDevice sender, IInspectable args);
   // void CleanConnection(uint64_t bluetoothAddress);
   // std::map<uint64_t, std::unique_ptr<BluetoothDeviceAgent>> connectedDevices{};
 
-  bool initialized = false;
-  BluetoothLEAdvertisementWatcher bleWatcher = nullptr;
-  winrt::event_token bluetoothLEWatcherReceivedToken;
-  std::unique_ptr<flutter::EventSink<EncodableValue>> scan_result_sink_;
+  std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> scanHandler;
   std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> connectedHandler;
 };
 
@@ -121,41 +96,15 @@ void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
         plugin_pointer->HandleMethodCall(call, std::move(result));
       });
 
-  auto handler = std::make_unique<
-      flutter::StreamHandlerFunctions<>>(
-      [plugin_pointer = plugin.get()](
-          const EncodableValue* arguments,
-          std::unique_ptr<flutter::EventSink<>>&& events)
-          -> std::unique_ptr<flutter::StreamHandlerError<>> {
-        return plugin_pointer->OnListen(arguments, std::move(events));
-      },
-      [plugin_pointer = plugin.get()](const EncodableValue* arguments)
-          -> std::unique_ptr<flutter::StreamHandlerError<>> {
-        return plugin_pointer->OnCancel(arguments);
-      });
-
   auto charHandler = std::make_unique<flutter::BleCharHandler>();
+  auto scanHandler = std::make_unique<flutter::BleScanHandler>();
   auto statusHandler = std::make_unique<flutter::BleStatusHandler>();
 
   characteristicChannel->SetStreamHandler(std::move(charHandler));
-  scanChannel->SetStreamHandler(std::move(handler));
+  scanChannel->SetStreamHandler(std::move(scanHandler));
   statusChannel->SetStreamHandler(std::move(statusHandler));
 
   registrar->AddPlugin(std::move(plugin));
-}
-
-std::vector<uint8_t> parseManufacturerData(BluetoothLEAdvertisement advertisement) {
-  if (advertisement.ManufacturerData().Size() == 0)
-    return std::vector<uint8_t>();
-
-  auto manufacturerData = advertisement.ManufacturerData().GetAt(0);
-  // FIXME Compat with REG_DWORD_BIG_ENDIAN
-  uint8_t* prefix = uint16_t_union{ manufacturerData.CompanyId() }.bytes;
-  auto result = std::vector<uint8_t>{ prefix, prefix + sizeof(uint16_t_union) };
-
-  auto data = to_bytevc(manufacturerData.Data());
-  result.insert(result.end(), data.begin(), data.end());
-  return result;
 }
 
 ReactiveBleWindowsPlugin::ReactiveBleWindowsPlugin(flutter::PluginRegistrarWindows *registrar) {
@@ -165,33 +114,27 @@ ReactiveBleWindowsPlugin::ReactiveBleWindowsPlugin(flutter::PluginRegistrarWindo
             &flutter::StandardMethodCodec::GetInstance());
   connectedHandler = std::make_unique<flutter::BleConnectedHandler>();
   connectedChannel->SetStreamHandler(std::move(connectedHandler));
+
+  auto scanChannel =
+    std::make_unique<flutter::EventChannel<EncodableValue>>(
+            registrar->messenger(), "flutter_reactive_ble_scan",
+            &flutter::StandardMethodCodec::GetInstance());
+  scanHandler = std::make_unique<flutter::BleScanHandler>();
+  scanChannel->SetStreamHandler(std::move(scanHandler));
 }
 
-ReactiveBleWindowsPlugin::~ReactiveBleWindowsPlugin() {
-  if (bleWatcher) {
-    bleWatcher.Stop();
-    bleWatcher.Received(bluetoothLEWatcherReceivedToken);
-    bleWatcher = nullptr;
-  }
-}
+ReactiveBleWindowsPlugin::~ReactiveBleWindowsPlugin() {}
 
 void ReactiveBleWindowsPlugin::HandleMethodCall(
     const flutter::MethodCall<flutter::EncodableValue> &method_call,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   std::string methodName = method_call.method_name();
-  if (methodName.compare("initialize") == 0) {
-    bleWatcher = BluetoothLEAdvertisementWatcher();
-    bluetoothLEWatcherReceivedToken = bleWatcher.Received({ this, &ReactiveBleWindowsPlugin::OnAdvertisementReceived });
+  if (methodName.compare("initialize") == 0) {  //TODO: Is anything needed in initialize, deinitialize, and scanForDevices now?
     result->Success();
   } else if (methodName.compare("deinitialize") == 0) {
-    if (bleWatcher) {
-      bleWatcher.Stop();
-      bleWatcher.Received(bluetoothLEWatcherReceivedToken);
-    }
     result->Success();
   } else if (methodName.compare("scanForDevices") == 0) {
     //TODO: Use scan parameters (List<Uuid> withServices, ScanMode scanMode, bool requireLocationServicesEnabled)?
-    bleWatcher.Start();
     result->Success();
   } else if (methodName.compare("connectToDevice") == 0) {
     ConnectToDeviceRequest req;
@@ -228,63 +171,6 @@ void ReactiveBleWindowsPlugin::HandleMethodCall(
     std::cout << "Unknown method: " << methodName << std::endl;  // Debugging
     result->NotImplemented();
   }
-}
-
-std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> ReactiveBleWindowsPlugin::OnListenInternal(
-    const EncodableValue* arguments, std::unique_ptr<flutter::EventSink<EncodableValue>>&& events) {
-  scan_result_sink_ = std::move(events);
-  if (bleWatcher.Status() != BluetoothLEAdvertisementWatcherStatus::Started) {
-    bleWatcher.Start();
-  }
-  initialized = true;
-  return nullptr;
-}
-
-std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> ReactiveBleWindowsPlugin::OnCancelInternal(
-    const EncodableValue* arguments) {
-  scan_result_sink_ = nullptr;
-  if (initialized && bleWatcher.Status() == BluetoothLEAdvertisementWatcherStatus::Started) {
-    bleWatcher.Stop();
-  }
-  return nullptr;
-}
-
-void ReactiveBleWindowsPlugin::OnAdvertisementReceived(
-  BluetoothLEAdvertisementWatcher watcher,
-  BluetoothLEAdvertisementReceivedEventArgs args) {
-  if (scan_result_sink_) {
-    auto manufacturer_data = parseManufacturerData(args.Advertisement());
-    std::string str(manufacturer_data.begin(), manufacturer_data.end());
-
-    DeviceScanInfo info;
-    info.set_id(std::to_string(args.BluetoothAddress()));
-    info.set_name(winrt::to_string(args.Advertisement().LocalName()));
-    info.set_manufacturerdata(str);
-    info.add_serviceuuids();
-    info.add_servicedata();
-    info.set_rssi(args.RawSignalStrengthInDBm());
-    SendDeviceScanInfo(info);
-  }
-}
-
-void ReactiveBleWindowsPlugin::SendDeviceScanInfo(DeviceScanInfo msg) {
-  size_t size = msg.ByteSizeLong();
-  uint8_t *buffer = (uint8_t*) malloc(size);
-  bool success = msg.SerializeToArray(buffer, size);
-  if (!success) {
-    std::cout << "Failed to serialize message into buffer." << std::endl;  // Debugging
-    free(buffer);
-    return;
-  }
-
-  EncodableList result;
-  for(uint32_t i = 0; i < size; i++) {
-    uint8_t value = buffer[i];
-    EncodableValue encodedVal = (EncodableValue) value;
-    result.push_back(encodedVal);
-  }
-  scan_result_sink_->EventSink::Success(result);
-  free(buffer);
 }
 
 // winrt::fire_and_forget ReactiveBleWindowsPlugin::ConnectAsync(uint64_t addr) {
