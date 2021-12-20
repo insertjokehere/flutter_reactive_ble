@@ -28,7 +28,8 @@
 #include "include/reactive_ble_windows/ble_status_handler.h"
 #include "bluetooth_device_agent.cpp"
 
-namespace {
+namespace
+{
 
 using flutter::EncodableMap;
 using flutter::EncodableValue;
@@ -181,9 +182,23 @@ void ReactiveBleWindowsPlugin::HandleMethodCall(
     }
     result->Success();
   } else if (methodName.compare("disconnectFromDevice") == 0) {
-    // deviceId
-    //TODO: Implement disconnect from device
-    result->NotImplemented();
+    const flutter::EncodableValue* pEncodableValue = method_call.arguments();
+    const std::vector<uint8_t>* pVector = std::get_if<std::vector<uint8_t>>(pEncodableValue);
+    if (pVector && pVector->size() > 0) {
+      ConnectToDeviceRequest req;
+      bool res = req.ParsePartialFromArray(pVector->data(), pVector->size());
+      if (res) {
+        uint64_t addr = std::stoull(req.deviceid());
+        CleanConnection(addr);
+      } else {
+        result->Error("Unable to parse message");
+        return;
+      }
+    } else {
+      result->Error("No data");
+      return;
+    }
+    result->Success();
   } else {
     std::cout << "Unknown method: " << methodName << std::endl;  // Debugging
     result->NotImplemented();
