@@ -14,11 +14,13 @@
 
 #include "../lib/src/generated/bledata.pb.h"
 
-namespace flutter {
+namespace flutter
+{
 
 class EncodableValue;
 
-class BleScanHandler : public StreamHandler<EncodableValue> {
+class BleScanHandler : public StreamHandler<EncodableValue>
+{
  public:
   BleScanHandler() {}
   virtual ~BleScanHandler() = default;

@@ -12,11 +12,13 @@
 
 #include "../lib/src/generated/bledata.pb.h"
 
-namespace flutter {
+namespace flutter
+{
 
 class EncodableValue;
 
-enum BleStatus {
+enum BleStatus
+{
   unknown = 0,
   unsupported = 1,
   unauthorized = 2,
@@ -25,7 +27,8 @@ enum BleStatus {
   ready = 5
 };
 
-class BleStatusHandler : public StreamHandler<EncodableValue> {
+class BleStatusHandler : public StreamHandler<EncodableValue>
+{
  public:
   BleStatusHandler() {}
   virtual ~BleStatusHandler() = default;

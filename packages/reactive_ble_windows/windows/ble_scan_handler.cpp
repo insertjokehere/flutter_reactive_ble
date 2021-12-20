@@ -3,7 +3,8 @@
 #include <windows.h>
 #include <winrt/Windows.Foundation.Collections.h>
 
-namespace flutter {
+namespace flutter
+{
 
 using namespace winrt::Windows::Foundation;
 using namespace winrt::Windows::Foundation::Collections;
@@ -12,20 +13,22 @@ using namespace winrt::Windows::Devices::Bluetooth;
 using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
 using namespace winrt::Windows::Storage::Streams;
 
-
-union uint16_t_union {
+union uint16_t_union
+{
   uint16_t uint16;
   byte bytes[sizeof(uint16_t)];
 };
 
-std::vector<uint8_t> to_bytevc(IBuffer buffer) {
+std::vector<uint8_t> to_bytevc(IBuffer buffer)
+{
   auto reader = DataReader::FromBuffer(buffer);
   auto result = std::vector<uint8_t>(reader.UnconsumedBufferLength());
   reader.ReadBytes(result);
   return result;
 }
 
-std::vector<uint8_t> parseManufacturerData(BluetoothLEAdvertisement advertisement) {
+std::vector<uint8_t> parseManufacturerData(BluetoothLEAdvertisement advertisement)
+{
   if (advertisement.ManufacturerData().Size() == 0)
     return std::vector<uint8_t>();
 
@@ -40,19 +43,19 @@ std::vector<uint8_t> parseManufacturerData(BluetoothLEAdvertisement advertisemen
 }
 
 std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleScanHandler::OnListenInternal(
-    const EncodableValue* arguments, std::unique_ptr<flutter::EventSink<EncodableValue>>&& events) {
+    const EncodableValue* arguments, std::unique_ptr<flutter::EventSink<EncodableValue>>&& events)
+{
   scan_result_sink_ = std::move(events);
   bleWatcher = BluetoothLEAdvertisementWatcher();
   bluetoothLEWatcherReceivedToken = bleWatcher.Received({ this, &BleScanHandler::OnAdvertisementReceived });
-  if (bleWatcher.Status() != BluetoothLEAdvertisementWatcherStatus::Started) {
-    bleWatcher.Start();
-  }
+  bleWatcher.Start();
   initialized = true;
   return nullptr;
 }
 
 std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleScanHandler::OnCancelInternal(
-    const EncodableValue* arguments) {
+    const EncodableValue* arguments)
+{
   scan_result_sink_ = nullptr;
   if (initialized && bleWatcher.Status() == BluetoothLEAdvertisementWatcherStatus::Started) {
     bleWatcher.Stop();
@@ -64,7 +67,8 @@ std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleScanHandler::OnC
 
 void BleScanHandler::OnAdvertisementReceived(
   BluetoothLEAdvertisementWatcher watcher,
-  BluetoothLEAdvertisementReceivedEventArgs args) {
+  BluetoothLEAdvertisementReceivedEventArgs args)
+{
   if (scan_result_sink_) {
     auto manufacturer_data = parseManufacturerData(args.Advertisement());
     std::string str(manufacturer_data.begin(), manufacturer_data.end());
@@ -80,7 +84,8 @@ void BleScanHandler::OnAdvertisementReceived(
   }
 }
 
-void BleScanHandler::SendDeviceScanInfo(DeviceScanInfo msg) {
+void BleScanHandler::SendDeviceScanInfo(DeviceScanInfo msg)
+{
   size_t size = msg.ByteSizeLong();
   uint8_t *buffer = (uint8_t*) malloc(size);
   bool success = msg.SerializeToArray(buffer, size);
@@ -100,4 +105,4 @@ void BleScanHandler::SendDeviceScanInfo(DeviceScanInfo msg) {
   free(buffer);
 }
 
-}
+}  // namespace flutter
