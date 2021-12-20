@@ -14,50 +14,51 @@
 
 namespace flutter
 {
+    class EncodableValue;
 
-class EncodableValue;
 
-enum BleStatus
-{
-  unknown = 0,
-  unsupported = 1,
-  unauthorized = 2,
-  poweredOff = 3,
-  locationServicesDisabled = 4,
-  ready = 5
-};
+    enum BleStatus
+    {
+        unknown = 0,
+        unsupported = 1,
+        unauthorized = 2,
+        poweredOff = 3,
+        locationServicesDisabled = 4,
+        ready = 5
+    };
 
-class BleStatusHandler : public StreamHandler<EncodableValue>
-{
- public:
-  BleStatusHandler() {}
-  virtual ~BleStatusHandler() = default;
 
-  // Prevent copying.
-  BleStatusHandler(BleStatusHandler const&) = delete;
-  BleStatusHandler& operator=(BleStatusHandler const&) = delete;
+    class BleStatusHandler : public StreamHandler<EncodableValue>
+    {
+    public:
+        BleStatusHandler() {}
+        virtual ~BleStatusHandler() = default;
 
-  std::unique_ptr<flutter::EventSink<EncodableValue>> status_result_sink_;
+        // Prevent copying.
+        BleStatusHandler(BleStatusHandler const &) = delete;
+        BleStatusHandler &operator=(BleStatusHandler const &) = delete;
 
-  virtual void BleStatusChangedHandler(winrt::Windows::Devices::Radios::Radio const& sender,
-    winrt::Windows::Foundation::IInspectable const& args);
+        std::unique_ptr<flutter::EventSink<EncodableValue>> status_result_sink_;
 
- protected:
-  winrt::Windows::Devices::Radios::Radio bluetoothRadio{ nullptr };
-  
-  virtual std::unique_ptr<StreamHandlerError<>> OnListenInternal(
-    const EncodableValue* arguments,
-    std::unique_ptr<EventSink<EncodableValue>>&& events);
+        virtual void BleStatusChangedHandler(winrt::Windows::Devices::Radios::Radio const &sender,
+                                             winrt::Windows::Foundation::IInspectable const &args);
 
-  virtual std::unique_ptr<StreamHandlerError<>> OnCancelInternal(
-      const EncodableValue* arguments);
+    protected:
+        winrt::Windows::Devices::Radios::Radio bluetoothRadio{nullptr};
 
- private:
-  virtual winrt::fire_and_forget InitializeBleAsync();
+        virtual std::unique_ptr<StreamHandlerError<>> OnListenInternal(
+            const EncodableValue *arguments,
+            std::unique_ptr<EventSink<EncodableValue>> &&events);
 
-  virtual void SendBleStatus(BleStatusInfo msg);
-};
+        virtual std::unique_ptr<StreamHandlerError<>> OnCancelInternal(
+            const EncodableValue *arguments);
 
-}  // namespace flutter
+    private:
+        virtual winrt::fire_and_forget InitializeBleAsync();
 
-#endif  // BLE_STATUS_HANDLER_H
+        virtual void SendBleStatus(BleStatusInfo msg);
+    };
+
+} // namespace flutter
+
+#endif // BLE_STATUS_HANDLER_H

@@ -16,30 +16,28 @@
 
 namespace flutter
 {
+    class EncodableValue;
 
-class EncodableValue;
 
-class BleCharHandler : public StreamHandler<EncodableValue>
-{
- public:
-  BleCharHandler() {}
-  virtual ~BleCharHandler() = default;
+    class BleCharHandler : public StreamHandler<EncodableValue>
+    {
+    public:
+        BleCharHandler() {}
+        virtual ~BleCharHandler() = default;
 
-  // Prevent copying.
-  BleCharHandler(BleCharHandler const&) = delete;
-  BleCharHandler& operator=(BleCharHandler const&) = delete;
+        // Prevent copying.
+        BleCharHandler(BleCharHandler const &) = delete;
+        BleCharHandler &operator=(BleCharHandler const &) = delete;
 
- protected:
-  
-  virtual std::unique_ptr<StreamHandlerError<>> OnListenInternal(
-    const EncodableValue* arguments,
-    std::unique_ptr<EventSink<EncodableValue>>&& events);
+    protected:
+        virtual std::unique_ptr<StreamHandlerError<>> OnListenInternal(
+            const EncodableValue *arguments,
+            std::unique_ptr<EventSink<EncodableValue>> &&events);
 
-  virtual std::unique_ptr<StreamHandlerError<>> OnCancelInternal(
-      const EncodableValue* arguments);
+        virtual std::unique_ptr<StreamHandlerError<>> OnCancelInternal(
+            const EncodableValue *arguments);
+    };
 
-};
+} // namespace flutter
 
-}  // namespace flutter
-
-#endif  // BLE_CHAR_HANDLER_H
+#endif // BLE_CHAR_HANDLER_H

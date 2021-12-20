@@ -16,40 +16,39 @@
 
 namespace flutter
 {
+    class EncodableValue;
 
-class EncodableValue;
 
-class BleScanHandler : public StreamHandler<EncodableValue>
-{
- public:
-  BleScanHandler() {}
-  virtual ~BleScanHandler() = default;
+    class BleScanHandler : public StreamHandler<EncodableValue>
+    {
+    public:
+        BleScanHandler() {}
+        virtual ~BleScanHandler() = default;
 
-  // Prevent copying.
-  BleScanHandler(BleScanHandler const&) = delete;
-  BleScanHandler& operator=(BleScanHandler const&) = delete;
+        // Prevent copying.
+        BleScanHandler(BleScanHandler const &) = delete;
+        BleScanHandler &operator=(BleScanHandler const &) = delete;
 
- protected:
-  virtual std::unique_ptr<flutter::StreamHandlerError<>> OnListenInternal(
-      const EncodableValue* arguments,
-      std::unique_ptr<flutter::EventSink<>>&& events) override;
+    protected:
+        virtual std::unique_ptr<flutter::StreamHandlerError<>> OnListenInternal(
+            const EncodableValue *arguments,
+            std::unique_ptr<flutter::EventSink<>> &&events) override;
 
-  virtual std::unique_ptr<flutter::StreamHandlerError<>> OnCancelInternal(
-      const EncodableValue* arguments) override;
+        virtual std::unique_ptr<flutter::StreamHandlerError<>> OnCancelInternal(
+            const EncodableValue *arguments) override;
 
-  void OnAdvertisementReceived(
-      winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher watcher,
-      winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs args);
+        void OnAdvertisementReceived(
+            winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher watcher,
+            winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs args);
 
-  void SendDeviceScanInfo(DeviceScanInfo msg);
+        void SendDeviceScanInfo(DeviceScanInfo msg);
 
-  bool initialized = false;
-  winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher bleWatcher = nullptr;
-  winrt::event_token bluetoothLEWatcherReceivedToken;
-  std::unique_ptr<flutter::EventSink<EncodableValue>> scan_result_sink_;
+        bool initialized = false;
+        winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher bleWatcher = nullptr;
+        winrt::event_token bluetoothLEWatcherReceivedToken;
+        std::unique_ptr<flutter::EventSink<EncodableValue>> scan_result_sink_;
+    };
 
-};
+} // namespace flutter
 
-}  // namespace flutter
-
-#endif  // BLE_SCAN_HANDLER_H
+#endif // BLE_SCAN_HANDLER_H
