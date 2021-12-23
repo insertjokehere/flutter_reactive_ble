@@ -224,7 +224,7 @@ class ReactiveBleWindowsPlatform extends ReactiveBlePlatform {
   Future<List<DiscoveredService>> discoverServices(String deviceId) async =>
       _bleMethodChannel
           .invokeMethod<List<int>>(
-            'discoverServices',
+            "discoverServices",
             _argsToProtobufConverter
                 .createDiscoverServicesRequest(deviceId)
                 .writeToBuffer(),
