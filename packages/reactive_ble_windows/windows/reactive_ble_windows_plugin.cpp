@@ -288,10 +288,15 @@ namespace
                         auto task { DiscoverServicesAsync(*iter->second, addr) };
                         std::cout << "Post-method" << std::endl;
                         DiscoveredService data = task.get();
-                        std::cout << "Got data" << std::endl;
-                        size_t size = data.ByteSizeLong();
+
+                        DiscoverServicesInfo info;
+                        info.set_deviceid(req.deviceid());
+                        info.add_services()->CopyFrom(data);
+                        info.PrintDebugString();
+                        
+                        size_t size = info.ByteSizeLong();
                         uint8_t *buffer = (uint8_t *)malloc(size);
-                        bool success = data.SerializeToArray(buffer, size);
+                        bool success = info.SerializeToArray(buffer, size);
                         if (!success)
                         {
                             std::cout << "Failed to serialize message into buffer." << std::endl; // Debugging
@@ -380,9 +385,39 @@ namespace
             }
             IVectorView<GattDeviceService> services = servicesResult.Services();
             DiscoveredService converted;
-            
-            winrt::guid thing = services.GetAt(0).Uuid();
-            converted.mutable_serviceuuid()->set_data(to_uuidstr(thing));
+
+            GattDeviceService const service = services.GetAt(0);
+            converted.mutable_serviceuuid()->set_data(to_uuidstr(service.Uuid()));
+
+            winrt::Windows::Foundation::Collections::IVectorView includedServices = service.GetIncludedServicesAsync().get().Services();
+            converted.add_includedservices();
+            for (size_t i = 0; i < includedServices.Size(); i++)            
+            {   
+                DiscoveredService tmp;
+                tmp.mutable_serviceuuid()->set_data(to_uuidstr(includedServices.GetAt(i).Uuid()));
+                converted.add_includedservices()->CopyFrom(tmp);
+            }
+
+            winrt::Windows::Foundation::Collections::IVectorView characteristics = service.GetCharacteristicsAsync().get().Characteristics();
+            for (size_t i = 0; i < characteristics.Size(); i++)            
+            {   
+                GattCharacteristic tmp_char = characteristics.GetAt(i);
+                GattCharacteristicProperties props = tmp_char.CharacteristicProperties();
+                DiscoveredCharacteristic tmp;
+                
+                tmp.mutable_characteristicid()->set_data(to_uuidstr(tmp_char.Uuid()));
+                tmp.mutable_serviceid()->set_data(to_uuidstr(service.Uuid()));
+
+                tmp.set_isreadable((props & GattCharacteristicProperties::Read) != GattCharacteristicProperties::None);
+                tmp.set_iswritablewithresponse((props & GattCharacteristicProperties::Write) != GattCharacteristicProperties::None);
+                tmp.set_iswritablewithoutresponse((props & GattCharacteristicProperties::WriteWithoutResponse) != GattCharacteristicProperties::None);
+                tmp.set_isnotifiable((props & GattCharacteristicProperties::Notify) != GattCharacteristicProperties::None);
+                tmp.set_isindicatable((props & GattCharacteristicProperties::Indicate) != GattCharacteristicProperties::None);
+
+                converted.add_characteristics()->CopyFrom(tmp);
+                converted.add_characteristicuuids()->CopyFrom(tmp.characteristicid());
+            }
+
             converted.PrintDebugString(); // Debugging
             std::cout << "Obtained services, returning" << std::endl;  // Debugging
             return converted;
