@@ -220,16 +220,25 @@ class ReactiveBleWindowsPlatform extends ReactiveBlePlatform {
           )
           .then((data) => _protobufConverter.clearGattCacheResultFrom(data!));
 
+  List<DiscoveredService> parse(data) {
+    // Helper method for readability
+    print("Dart got ${data}");
+    List<DiscoveredService> dat =
+        _protobufConverter.discoveredServicesFrom(List<int>.from(data!));
+    print("Dart parsed services ${dat}");
+    return dat;
+  }
+
   @override
   Future<List<DiscoveredService>> discoverServices(String deviceId) async =>
       _bleMethodChannel
-          .invokeMethod<List<int>>(
+          .invokeMethod(
             "discoverServices",
             _argsToProtobufConverter
                 .createDiscoverServicesRequest(deviceId)
                 .writeToBuffer(),
           )
-          .then((data) => _protobufConverter.discoveredServicesFrom(data!));
+          .then(parse);
 }
 
 class ReactiveBleWindowsPlatformFactory {

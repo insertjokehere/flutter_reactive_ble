@@ -380,10 +380,10 @@ namespace
             }
             IVectorView<GattDeviceService> services = servicesResult.Services();
             DiscoveredService converted;
-            Uuid uuid;
+            
             winrt::guid thing = services.GetAt(0).Uuid();
-            uuid.set_data(to_uuidstr(thing).c_str());
-            converted.set_allocated_serviceuuid(&uuid);
+            converted.mutable_serviceuuid()->set_data(to_uuidstr(thing));
+            converted.PrintDebugString(); // Debugging
             std::cout << "Obtained services, returning" << std::endl;  // Debugging
             return converted;
         });
