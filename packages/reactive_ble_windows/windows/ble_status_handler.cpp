@@ -66,7 +66,6 @@ namespace flutter
 
     winrt::fire_and_forget BleStatusHandler::InitializeBleAsync()
     {
-        //TODO: Is it worth checking to see if the bluetooth radio does not already exist?
         IAsyncOperation<BluetoothAdapter> aync_op = BluetoothAdapter::GetDefaultAsync();
         BluetoothAdapter bluetoothAdapter = co_await aync_op;
         bluetoothRadio = co_await bluetoothAdapter.GetRadioAsync();

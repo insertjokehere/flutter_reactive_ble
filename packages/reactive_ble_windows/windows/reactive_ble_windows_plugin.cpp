@@ -82,6 +82,8 @@ namespace
 
         void ReactiveBleWindowsPlugin::SendConnectionUpdate(std::string address, DeviceConnectionState state);
 
+        std::pair<uint64_t, std::string> ParseDeviceAddress(const flutter::EncodableValue *args, bool isConnectToDeviceRequest);
+
         std::unique_ptr<flutter::EventSink<EncodableValue>> connected_device_sink_;
         std::map<uint64_t, std::unique_ptr<BluetoothDeviceAgent>> connectedDevices{};
     };
@@ -162,7 +164,7 @@ namespace
     {
         std::string methodName = method_call.method_name();
         if (methodName.compare("initialize") == 0)
-        { //TODO: Is anything needed in initialize, deinitialize, and scanForDevices now?
+        {
             result->Success();
         }
         else if (methodName.compare("deinitialize") == 0)
@@ -175,60 +177,30 @@ namespace
             result->Success();
         }
         else if (methodName.compare("connectToDevice") == 0)
-        { //TODO: Reduce duplication by creating a method to obtain uint64_t addr from method_call + result (?)
-            // std::get_if returns a pointer to the value stored or a null pointer on error.
-            // This ensures we return early if we get a null pointer.
-            const flutter::EncodableValue *pEncodableValue = method_call.arguments();
-            const std::vector<uint8_t> *pVector = std::get_if<std::vector<uint8_t>>(pEncodableValue);
-            if (pVector && pVector->size() > 0)
+        {
+            std::pair<uint64_t, std::string> parseResult = ParseDeviceAddress(method_call.arguments(), true);
+            if (parseResult.second.empty())
             {
-                ConnectToDeviceRequest req;
-                // Parse vector into a protobuf message. Note the call to `pVector->data()` (https://en.cppreference.com/w/cpp/container/vector/data),
-                // and note further that this may return a null pointer if pVector->size() is 0.
-                bool res = req.ParsePartialFromArray(pVector->data(), pVector->size());
-                if (res)
-                {
-                    uint64_t addr = std::stoull(req.deviceid());
-                    ConnectAsync(addr);
-                }
-                else
-                {
-                    result->Error("Unable to parse message");
-                    return;
-                }
+                ConnectAsync(parseResult.first);
+                result->Success();
             }
             else
             {
-                result->Error("No data");
-                return;
+                result->Error(parseResult.second);
             }
-            result->Success();
         }
         else if (methodName.compare("disconnectFromDevice") == 0)
         {
-            const flutter::EncodableValue *pEncodableValue = method_call.arguments();
-            const std::vector<uint8_t> *pVector = std::get_if<std::vector<uint8_t>>(pEncodableValue);
-            if (pVector && pVector->size() > 0)
+            std::pair<uint64_t, std::string> parseResult = ParseDeviceAddress(method_call.arguments(), false);
+            if (parseResult.second.empty())
             {
-                DisconnectFromDeviceRequest req;
-                bool res = req.ParsePartialFromArray(pVector->data(), pVector->size());
-                if (res)
-                {
-                    uint64_t addr = std::stoull(req.deviceid());
-                    CleanConnection(addr);
-                }
-                else
-                {
-                    result->Error("Unable to parse message");
-                    return;
-                }
+                CleanConnection(parseResult.first);
+                result->Success();
             }
             else
             {
-                result->Error("No data");
-                return;
+                result->Error(parseResult.second);
             }
-            result->Success();
         }
         else if (methodName.compare("readCharacteristic") == 0)
         {
@@ -290,7 +262,6 @@ namespace
                         {
                             info.add_services()->CopyFrom(service);
                         }
-                        info.PrintDebugString();
                         
                         size_t size = info.ByteSizeLong();
                         uint8_t *buffer = (uint8_t *)malloc(size);
@@ -383,7 +354,6 @@ namespace
             if (servicesResult.Status() != GattCommunicationStatus::Success)
             {
                 OutputDebugString((L"GetGattServicesAsync error: " + winrt::to_hstring((int32_t)servicesResult.Status()) + L"\n").c_str());
-                //TODO: Handle failure somewhere?
                 return result;
             }
             IVectorView<GattDeviceService> services = servicesResult.Services();
@@ -481,6 +451,53 @@ namespace
         }
         connected_device_sink_->EventSink::Success(result);
         free(buffer);
+    }
+
+
+    /**
+     * Parse BLE device address from "connectToDevice" or "disconnectFromDevice" method call arguments.
+     * 
+     * @param args The arguments passed to the invoked method call.
+     * @param isConnectToDeviceRequest If the arguments are for a connection request, as opposed to a disconnection request.
+     * @return std::pair<uint64_t, std::string> First is the BLE device address, or 0 if parsing failed.
+     *                                          Second is an error message which is empty on successful parsing.
+     */
+    std::pair<uint64_t, std::string> ReactiveBleWindowsPlugin::ParseDeviceAddress(const flutter::EncodableValue *args, bool isConnectToDeviceRequest)
+    {
+        // std::get_if returns a pointer to the value stored or a null pointer on error.
+        // This ensures we return early if we get a null pointer.
+        const std::vector<uint8_t> *pVector = std::get_if<std::vector<uint8_t>>(args);
+        if (pVector && pVector->size() <= 0)
+        {
+            return std::make_pair(0, "No data in message.");
+        }
+
+        // Parse vector into a protobuf message via ParsePartialFromArray.
+        // Note the call to `pVector->data()` (https://en.cppreference.com/w/cpp/container/vector/data),
+        // and note further that this may return a null pointer if pVector->size() is 0.
+        if (isConnectToDeviceRequest)
+        {
+            ConnectToDeviceRequest req;
+            bool res = req.ParsePartialFromArray(pVector->data(), pVector->size());
+            if (res)
+            {
+                uint64_t addr = std::stoull(req.deviceid());
+                return std::make_pair(addr, "");
+            }
+        }
+        else
+        {
+            DisconnectFromDeviceRequest req;
+            bool res = req.ParsePartialFromArray(pVector->data(), pVector->size());
+            if (res)
+            {
+                uint64_t addr = std::stoull(req.deviceid());
+                return std::make_pair(addr, "");
+            }
+        }
+
+        // ParsePartialFromArray returned false, indicating it was unable to parse the given data.
+        return std::make_pair(0, "Unable to parse device address.");
     }
 
 } // namespace
