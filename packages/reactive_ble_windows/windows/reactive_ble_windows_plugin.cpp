@@ -74,9 +74,7 @@ namespace
 
         winrt::fire_and_forget ConnectAsync(uint64_t addr);
 
-        // IAsyncOperation<DiscoverServicesInfo> DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent, uint64_t addr);
-        // IAsyncOperation<IVectorView<GattDeviceService>> DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent, uint64_t addr);
-        concurrency::task<DiscoveredService> DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent, uint64_t addr);
+        concurrency::task<std::list<DiscoveredService>> DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent, uint64_t addr);
 
         void BluetoothLEDevice_ConnectionStatusChanged(BluetoothLEDevice sender, IInspectable args);
 
@@ -275,7 +273,6 @@ namespace
                 if (res)
                 {
                     uint64_t addr = std::stoull(req.deviceid());
-                    std::cout << addr << std::endl;
                     auto iter = connectedDevices.find(addr);
                     if (iter == connectedDevices.end())
                     {
@@ -284,14 +281,15 @@ namespace
                     }
                     else
                     {
-                        // DiscoveredService data = DiscoverServicesAsync(*iter->second, addr).get();
                         auto task { DiscoverServicesAsync(*iter->second, addr) };
-                        std::cout << "Post-method" << std::endl;
-                        DiscoveredService data = task.get();
+                        std::list<DiscoveredService> data = task.get();
 
                         DiscoverServicesInfo info;
                         info.set_deviceid(req.deviceid());
-                        info.add_services()->CopyFrom(data);
+                        for (DiscoveredService service : data)
+                        {
+                            info.add_services()->CopyFrom(service);
+                        }
                         info.PrintDebugString();
                         
                         size_t size = info.ByteSizeLong();
@@ -370,136 +368,59 @@ namespace
     }
 
 
-    // IAsyncOperation<DiscoverServicesInfo> ReactiveBleWindowsPlugin::DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent, uint64_t addr)
-    concurrency::task<DiscoveredService> ReactiveBleWindowsPlugin::DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent, uint64_t addr)
+    concurrency::task<std::list<DiscoveredService>> ReactiveBleWindowsPlugin::DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent, uint64_t addr)
     {
         return concurrency::create_task([&]
         {
             auto servicesResult = bluetoothDeviceAgent.device.GetGattServicesAsync().get();
-            DiscoveredService empty;
+            std::list<DiscoveredService> result;
             if (servicesResult.Status() != GattCommunicationStatus::Success)
             {
                 OutputDebugString((L"GetGattServicesAsync error: " + winrt::to_hstring((int32_t)servicesResult.Status()) + L"\n").c_str());
                 //TODO: Handle failure somewhere?
-                return empty;
+                return result;
             }
             IVectorView<GattDeviceService> services = servicesResult.Services();
             DiscoveredService converted;
 
-            GattDeviceService const service = services.GetAt(0);
-            converted.mutable_serviceuuid()->set_data(to_uuidstr(service.Uuid()));
+            for (size_t i = 0; i < services.Size(); i++)
+            {
+                GattDeviceService const service = services.GetAt(i);
+                converted.mutable_serviceuuid()->set_data(to_uuidstr(service.Uuid()));
 
-            winrt::Windows::Foundation::Collections::IVectorView includedServices = service.GetIncludedServicesAsync().get().Services();
-            converted.add_includedservices();
-            for (size_t i = 0; i < includedServices.Size(); i++)            
-            {   
-                DiscoveredService tmp;
-                tmp.mutable_serviceuuid()->set_data(to_uuidstr(includedServices.GetAt(i).Uuid()));
-                converted.add_includedservices()->CopyFrom(tmp);
+                winrt::Windows::Foundation::Collections::IVectorView includedServices = service.GetIncludedServicesAsync().get().Services();
+                converted.add_includedservices();
+                for (size_t j = 0; j < includedServices.Size(); j++)            
+                {
+                    DiscoveredService tmp;
+                    tmp.mutable_serviceuuid()->set_data(to_uuidstr(includedServices.GetAt(j).Uuid()));
+                    converted.add_includedservices()->CopyFrom(tmp);
+                }
+
+                winrt::Windows::Foundation::Collections::IVectorView characteristics = service.GetCharacteristicsAsync().get().Characteristics();
+                for (size_t j = 0; j < characteristics.Size(); j++)            
+                {
+                    GattCharacteristic tmp_char = characteristics.GetAt(j);
+                    GattCharacteristicProperties props = tmp_char.CharacteristicProperties();
+                    DiscoveredCharacteristic tmp;
+                    
+                    tmp.mutable_characteristicid()->set_data(to_uuidstr(tmp_char.Uuid()));
+                    tmp.mutable_serviceid()->set_data(to_uuidstr(service.Uuid()));
+
+                    tmp.set_isreadable((props & GattCharacteristicProperties::Read) != GattCharacteristicProperties::None);
+                    tmp.set_iswritablewithresponse((props & GattCharacteristicProperties::Write) != GattCharacteristicProperties::None);
+                    tmp.set_iswritablewithoutresponse((props & GattCharacteristicProperties::WriteWithoutResponse) != GattCharacteristicProperties::None);
+                    tmp.set_isnotifiable((props & GattCharacteristicProperties::Notify) != GattCharacteristicProperties::None);
+                    tmp.set_isindicatable((props & GattCharacteristicProperties::Indicate) != GattCharacteristicProperties::None);
+
+                    converted.add_characteristics()->CopyFrom(tmp);
+                    converted.add_characteristicuuids()->CopyFrom(tmp.characteristicid());
+                }
+
+                result.push_back(converted);
             }
-
-            winrt::Windows::Foundation::Collections::IVectorView characteristics = service.GetCharacteristicsAsync().get().Characteristics();
-            for (size_t i = 0; i < characteristics.Size(); i++)            
-            {   
-                GattCharacteristic tmp_char = characteristics.GetAt(i);
-                GattCharacteristicProperties props = tmp_char.CharacteristicProperties();
-                DiscoveredCharacteristic tmp;
-                
-                tmp.mutable_characteristicid()->set_data(to_uuidstr(tmp_char.Uuid()));
-                tmp.mutable_serviceid()->set_data(to_uuidstr(service.Uuid()));
-
-                tmp.set_isreadable((props & GattCharacteristicProperties::Read) != GattCharacteristicProperties::None);
-                tmp.set_iswritablewithresponse((props & GattCharacteristicProperties::Write) != GattCharacteristicProperties::None);
-                tmp.set_iswritablewithoutresponse((props & GattCharacteristicProperties::WriteWithoutResponse) != GattCharacteristicProperties::None);
-                tmp.set_isnotifiable((props & GattCharacteristicProperties::Notify) != GattCharacteristicProperties::None);
-                tmp.set_isindicatable((props & GattCharacteristicProperties::Indicate) != GattCharacteristicProperties::None);
-
-                converted.add_characteristics()->CopyFrom(tmp);
-                converted.add_characteristicuuids()->CopyFrom(tmp.characteristicid());
-            }
-
-            converted.PrintDebugString(); // Debugging
-            std::cout << "Obtained services, returning" << std::endl;  // Debugging
-            return converted;
+            return result;
         });
-
-        // auto servicesResult = co_await bluetoothDeviceAgent.device.GetGattServicesAsync();
-        // DiscoveredService empty;
-        // if (servicesResult.Status() != GattCommunicationStatus::Success)
-        // {
-        //     OutputDebugString((L"GetGattServicesAsync error: " + winrt::to_hstring((int32_t)servicesResult.Status()) + L"\n").c_str());
-        //     //TODO: Handle failure outside of this method, as it currently sends result->Success() regardless?
-        //     co_return empty;
-        // }
-        // IVectorView<GattDeviceService> services = servicesResult.Services();
-        // DiscoveredService converted;
-        // Uuid* uuid;
-        // winrt::guid thing = services.GetAt(0).Uuid();
-        // uuid->set_data(to_uuidstr(thing).c_str());
-        // converted.set_allocated_serviceuuid(uuid);
-        // co_return converted;
-
-
-        // EncodableList result;
-        // for (GattDeviceService service : services)
-        // {
-        //     DiscoveredService converted;
-        //     Uuid* uuid;
-        //     uuid->set_data(to_uuidstr(service.Uuid()).c_str());
-        //     converted.set_allocated_serviceuuid(uuid);
-        //     // GattDeviceServicesResult includedServices = co_await service.GetIncludedServicesAsync();
-            
-        //     size_t size = converted.ByteSizeLong();
-        //     uint8_t *buffer = (uint8_t *)malloc(size);
-        //     bool success = converted.SerializeToArray(buffer, size);
-        //     if (!success)
-        //     {
-        //         std::cout << "Failed to serialize message into buffer." << std::endl; // Debugging
-        //         free(buffer);
-        //         co_return empty;
-        //     }
-
-        //     EncodableList result;
-        //     for (uint32_t i = 0; i < size; i++)
-        //     {
-        //         uint8_t value = buffer[i];
-        //         EncodableValue encodedVal = (EncodableValue)value;
-        //         result.push_back(encodedVal);
-        //     }
-        //     free(buffer);
-        // }
-
-        // GattDeviceService firstService = services.GetAt(0);
-        // DiscoveredService converted;
-        // Uuid* uuid;
-        // uuid->set_data(to_uuidstr(firstService.Uuid()).c_str());
-        // converted.set_allocated_serviceuuid(uuid);
-
-        // size_t size = converted.ByteSizeLong();
-        // uint8_t *buffer = (uint8_t *)malloc(size);
-        // bool success = converted.SerializeToArray(buffer, size);
-        // if (!success)
-        // {
-        //     std::cout << "Failed to serialize message into buffer." << std::endl; // Debugging
-        //     free(buffer);
-        //     co_return empty;
-        // }
-
-        // EncodableList result;
-        // for (uint32_t i = 0; i < size; i++)
-        // {
-        //     uint8_t value = buffer[i];
-        //     EncodableValue encodedVal = (EncodableValue)value;
-        //     result.push_back(encodedVal);
-        // }
-        // free(buffer);
-        // co_return result;
-
-
-        // GattDeviceService service = services.GetAt(0);
-        // service.GetAllCharacteristics();
-        // service.GetAllIncludedServices();
-
     }
 
 
