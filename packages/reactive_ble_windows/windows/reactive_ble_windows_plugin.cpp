@@ -262,7 +262,7 @@ namespace
         {
             result->NotImplemented();
         }
-        else if (methodName.compare("discoverServices") == 0)  // Async data
+        else if (methodName.compare("discoverServices") == 0)
         {
             const flutter::EncodableValue *pEncodableValue = method_call.arguments();
             const std::vector<uint8_t> *pVector = std::get_if<std::vector<uint8_t>>(pEncodableValue);
@@ -297,7 +297,7 @@ namespace
                         bool success = info.SerializeToArray(buffer, size);
                         if (!success)
                         {
-                            std::cout << "Failed to serialize message into buffer." << std::endl; // Debugging
+                            std::cout << "Failed to serialize message into buffer." << std::endl;  // Debugging
                             free(buffer);
                             result->Error("Failed to serialize message into buffer.");
                         }
@@ -352,7 +352,13 @@ namespace
 
     winrt::fire_and_forget ReactiveBleWindowsPlugin::ConnectAsync(uint64_t addr)
     {
-        auto device = co_await BluetoothLEDevice::FromBluetoothAddressAsync(addr); // May return null, need to perform null checking?
+        auto device = co_await BluetoothLEDevice::FromBluetoothAddressAsync(addr);
+        if (!device)
+        {
+            OutputDebugString((L"FromBluetoothAddressAsync error: Could not find device identified by " + winrt::to_hstring(addr) + L"\n").c_str());
+            SendConnectionUpdate(std::to_string(addr), DeviceConnectionState::disconnected);
+            co_return;
+        }
         auto servicesResult = co_await device.GetGattServicesAsync();
         if (servicesResult.Status() != GattCommunicationStatus::Success)
         {
