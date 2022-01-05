@@ -85,7 +85,8 @@ namespace
 
         void ReactiveBleWindowsPlugin::SendConnectionUpdate(std::string address, DeviceConnectionState state);
 
-        std::pair<uint64_t, std::string> ParseDeviceAddress(const flutter::EncodableValue *args, bool isConnectToDeviceRequest);
+        template <typename T>
+        std::pair<std::unique_ptr<T>, std::string> ParseArgsToRequest(const flutter::EncodableValue *args);
 
         std::unique_ptr<flutter::EventSink<EncodableValue>> connected_device_sink_;
         std::map<uint64_t, std::unique_ptr<BluetoothDeviceAgent>> connectedDevices{};
@@ -192,10 +193,11 @@ namespace
         }
         else if (methodName.compare("connectToDevice") == 0)
         {
-            std::pair<uint64_t, std::string> parseResult = ParseDeviceAddress(method_call.arguments(), true);
+            std::pair<std::unique_ptr<ConnectToDeviceRequest>, std::string> parseResult = ParseArgsToRequest<ConnectToDeviceRequest>(method_call.arguments());
             if (parseResult.second.empty())
             {
-                ConnectAsync(parseResult.first);
+                uint64_t addr = std::stoull(parseResult.first->deviceid());
+                ConnectAsync(addr);
                 result->Success();
             }
             else
@@ -205,10 +207,11 @@ namespace
         }
         else if (methodName.compare("disconnectFromDevice") == 0)
         {
-            std::pair<uint64_t, std::string> parseResult = ParseDeviceAddress(method_call.arguments(), false);
+            std::pair<std::unique_ptr<DisconnectFromDeviceRequest>, std::string> parseResult = ParseArgsToRequest<DisconnectFromDeviceRequest>(method_call.arguments());
             if (parseResult.second.empty())
             {
-                CleanConnection(parseResult.first);
+                uint64_t addr = std::stoull(parseResult.first->deviceid());
+                CleanConnection(addr);
                 result->Success();
             }
             else
@@ -250,64 +253,52 @@ namespace
         }
         else if (methodName.compare("discoverServices") == 0)
         {
-            const flutter::EncodableValue *pEncodableValue = method_call.arguments();
-            const std::vector<uint8_t> *pVector = std::get_if<std::vector<uint8_t>>(pEncodableValue);
-            if (pVector && pVector->size() > 0)
+            std::pair<std::unique_ptr<DiscoverServicesRequest>, std::string> parseResult = ParseArgsToRequest<DiscoverServicesRequest>(method_call.arguments());
+            if (!parseResult.second.empty())
             {
-                DiscoverServicesRequest req;
-                bool res = req.ParseFromArray(pVector->data(), pVector->size());
-                if (res)
-                {
-                    uint64_t addr = std::stoull(req.deviceid());
-                    auto iter = connectedDevices.find(addr);
-                    if (iter == connectedDevices.end())
-                    {
-                        result->Error("Not currently connected to selected device");
-                        return;
-                    }
-                    else
-                    {
-                        auto task { DiscoverServicesAsync(*iter->second) };
-                        std::list<DiscoveredService> data = task.get();
+                result->Error(parseResult.second);
+                return;
+            }
 
-                        DiscoverServicesInfo info;
-                        info.set_deviceid(req.deviceid());
-                        for (DiscoveredService service : data)
-                        {
-                            info.add_services()->CopyFrom(service);
-                        }
-                        
-                        size_t size = info.ByteSizeLong();
-                        uint8_t *buffer = (uint8_t *)malloc(size);
-                        bool success = info.SerializeToArray(buffer, size);
-                        if (!success)
-                        {
-                            std::cout << "Failed to serialize message into buffer." << std::endl;  // Debugging
-                            free(buffer);
-                            result->Error("Failed to serialize message into buffer.");
-                        }
-
-                        EncodableList encoded;
-                        for (uint32_t i = 0; i < size; i++)
-                        {
-                            uint8_t value = buffer[i];
-                            EncodableValue encodedVal = (EncodableValue)value;
-                            encoded.push_back(encodedVal);
-                        }
-                        free(buffer);
-                        result->Success(encoded);
-                        return;
-                    }
-                }
-                else
-                {
-                    result->Error("Unable to parse message");
-                    return;
-                }
+            std::string deviceID = parseResult.first->deviceid();
+            uint64_t addr = std::stoull(deviceID);
+            auto iter = connectedDevices.find(addr);
+            if (iter == connectedDevices.end())
+            {
+                result->Error("Not currently connected to selected device");
+                return;
             }
             else
             {
-                result->Error("No data");
+                auto task { DiscoverServicesAsync(*iter->second) };
+                std::list<DiscoveredService> data = task.get();
+
+                DiscoverServicesInfo info;
+                info.set_deviceid(deviceID);
+                for (DiscoveredService service : data)
+                {
+                    info.add_services()->CopyFrom(service);
+                }
+                
+                size_t size = info.ByteSizeLong();
+                uint8_t *buffer = (uint8_t *)malloc(size);
+                bool success = info.SerializeToArray(buffer, size);
+                if (!success)
+                {
+                    std::cout << "Failed to serialize message into buffer." << std::endl;  // Debugging
+                    free(buffer);
+                    result->Error("Failed to serialize message into buffer.");
+                }
+
+                EncodableList encoded;
+                for (uint32_t i = 0; i < size; i++)
+                {
+                    uint8_t value = buffer[i];
+                    EncodableValue encodedVal = (EncodableValue)value;
+                    encoded.push_back(encodedVal);
+                }
+                free(buffer);
+                result->Success(encoded);
                 return;
             }
         }
@@ -512,49 +503,37 @@ namespace
 
 
     /**
-     * @brief Parse BLE device address from "connectToDevice" or "disconnectFromDevice" method call arguments.
+     * @brief Parse Flutter method call arguments into request of type T.
      * 
-     * @param args The arguments passed to the invoked method call.
-     * @param isConnectToDeviceRequest If the arguments are for a connection request, as opposed to a disconnection request.
-     * @return std::pair<uint64_t, std::string> First is the BLE device address, or 0 if parsing failed.
-     *                                          Second is an error message which is empty on successful parsing.
+     * @tparam T The type of request to parse the arguments into, must implement google::protobuf::Message.
+     * @param args Method call arguments to parse into request of type T.
+     * @return std::pair<T*, std::string> Pair of pointer to the parsed args, and an error message string
+     *                                    (in case of error pointer will be null and string non-empty).
      */
-    std::pair<uint64_t, std::string> ReactiveBleWindowsPlugin::ParseDeviceAddress(const flutter::EncodableValue *args, bool isConnectToDeviceRequest)
+    template <typename T>
+    std::pair<std::unique_ptr<T>, std::string> ReactiveBleWindowsPlugin::ParseArgsToRequest(const flutter::EncodableValue *args)
     {
         // std::get_if returns a pointer to the value stored or a null pointer on error.
         // This ensures we return early if we get a null pointer.
         const std::vector<uint8_t> *pVector = std::get_if<std::vector<uint8_t>>(args);
         if (pVector && pVector->size() <= 0)
         {
-            return std::make_pair(0, "No data in message.");
+            return std::make_pair(nullptr, "No data in message.");
         }
 
         // Parse vector into a protobuf message via ParsePartialFromArray.
         // Note the call to `pVector->data()` (https://en.cppreference.com/w/cpp/container/vector/data),
-        // and note further that this may return a null pointer if pVector->size() is 0.
-        if (isConnectToDeviceRequest)
+        // and note further that this may return a null pointer if pVector->size() is 0 (hence prior check).
+        // T* req = new T();
+        auto req = std::make_unique<T>();
+        bool res = req->ParsePartialFromArray(pVector->data(), pVector->size());
+        if (res)
         {
-            ConnectToDeviceRequest req;
-            bool res = req.ParsePartialFromArray(pVector->data(), pVector->size());
-            if (res)
-            {
-                uint64_t addr = std::stoull(req.deviceid());
-                return std::make_pair(addr, "");
-            }
-        }
-        else
-        {
-            DisconnectFromDeviceRequest req;
-            bool res = req.ParsePartialFromArray(pVector->data(), pVector->size());
-            if (res)
-            {
-                uint64_t addr = std::stoull(req.deviceid());
-                return std::make_pair(addr, "");
-            }
+            return std::make_pair(std::move(req), "");
         }
 
         // ParsePartialFromArray returned false, indicating it was unable to parse the given data.
-        return std::make_pair(0, "Unable to parse device address.");
+        return std::make_pair(nullptr, "Unable to parse device address.");
     }
 
 } // namespace
