@@ -30,6 +30,12 @@ namespace
     #define GUID_ARG(guid) guid.Data1, guid.Data2, guid.Data3, guid.Data4[0], guid.Data4[1], guid.Data4[2], guid.Data4[3], guid.Data4[4], guid.Data4[5], guid.Data4[6], guid.Data4[7]
 
 
+    /**
+     * @brief Converts winrt::guid to std::string.
+     * 
+     * @param guid GUID to be converted.
+     * @return std::string GUID in string format, according to GUID_FORMAT and GUID_ARG structure.
+     */
     std::string to_uuidstr(winrt::guid guid)
     {
         char chars[36 + 1];
@@ -38,6 +44,9 @@ namespace
     }
 
 
+    /**
+     * @brief Helper/storage object for BLE device and corresponding services, characteristics, tokens.
+     */
     struct BluetoothDeviceAgent
     {
         BluetoothLEDevice device;
@@ -57,6 +66,12 @@ namespace
         }
 
 
+        /**
+         * @brief Asynchronously get the given service from the BLE device if services are not already cached.
+         * 
+         * @param service UUID of the desired service.
+         * @return IAsyncOperation<GattDeviceService> Asynchronous object which will return the obtained GattDeviceService.
+         */
         IAsyncOperation<GattDeviceService> GetServiceAsync(std::string service)
         {
             if (gattServices.count(service) == 0)
@@ -73,6 +88,13 @@ namespace
         }
 
 
+        /**
+         * @brief Asynchronously get the given characteristic from the BLE device if characteristics are not already cached.
+         * 
+         * @param service UUID of the service which has the desired characteristic.
+         * @param characteristic UUID of the desired characteristic.
+         * @return IAsyncOperation<GattCharacteristic> Asynchronous object which will return the obtained GattCharacteristic.
+         */
         IAsyncOperation<GattCharacteristic> GetCharacteristicAsync(std::string service, std::string characteristic)
         {
             if (gattCharacteristics.count(characteristic) == 0)

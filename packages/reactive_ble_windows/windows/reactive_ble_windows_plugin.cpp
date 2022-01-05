@@ -51,6 +51,9 @@ namespace
     };
 
 
+    /**
+     * @brief Plugin to handle Windows BLE operations.
+     */
     class ReactiveBleWindowsPlugin : public flutter::Plugin, public flutter::StreamHandler<EncodableValue>
     {
     public:
@@ -74,7 +77,7 @@ namespace
 
         winrt::fire_and_forget ConnectAsync(uint64_t addr);
 
-        concurrency::task<std::list<DiscoveredService>> DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent, uint64_t addr);
+        concurrency::task<std::list<DiscoveredService>> DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent);
 
         void BluetoothLEDevice_ConnectionStatusChanged(BluetoothLEDevice sender, IInspectable args);
 
@@ -89,6 +92,11 @@ namespace
     };
 
 
+    /**
+     * @brief Registers this plugin with the registrar, and instantiates channels and associated handlers.
+     * 
+     * @param registrar Windows-specific plugin registrar.
+     */
     void ReactiveBleWindowsPlugin::RegisterWithRegistrar(
         flutter::PluginRegistrarWindows *registrar)
     {
@@ -158,6 +166,12 @@ namespace
     ReactiveBleWindowsPlugin::~ReactiveBleWindowsPlugin() {}
 
 
+    /**
+     * @brief Handler for method calls from Flutter on the method channel.
+     * 
+     * @param method_call The method call from Flutter.
+     * @param result The result of the method call, which will be success, error, or not implemented.
+     */
     void ReactiveBleWindowsPlugin::HandleMethodCall(
         const flutter::MethodCall<flutter::EncodableValue> &method_call,
         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result)
@@ -253,7 +267,7 @@ namespace
                     }
                     else
                     {
-                        auto task { DiscoverServicesAsync(*iter->second, addr) };
+                        auto task { DiscoverServicesAsync(*iter->second) };
                         std::list<DiscoveredService> data = task.get();
 
                         DiscoverServicesInfo info;
@@ -305,6 +319,13 @@ namespace
     }
 
 
+    /**
+     * @brief Handler for OnListen to device connection.
+     * 
+     * @param arguments Currently unused parameter required by interface.
+     * @param events Unique pointer to the event sink for connected devices.
+     * @return std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> 
+     */
     std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> ReactiveBleWindowsPlugin::OnListenInternal(
         const EncodableValue *arguments, std::unique_ptr<flutter::EventSink<EncodableValue>> &&events)
     {
@@ -313,6 +334,12 @@ namespace
     }
 
 
+    /**
+     * @brief Handler for cancelling device connection.
+     * 
+     * @param arguments Currently unused parameter required by interface.
+     * @return std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> 
+     */
     std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> ReactiveBleWindowsPlugin::OnCancelInternal(
         const EncodableValue *arguments)
     {
@@ -321,6 +348,12 @@ namespace
     }
 
 
+    /**
+     * @brief Asynchronously connect to the BLE device with given address.
+     * 
+     * @param addr The address of the BLE device to connect to.
+     * @return winrt::fire_and_forget
+     */
     winrt::fire_and_forget ReactiveBleWindowsPlugin::ConnectAsync(uint64_t addr)
     {
         auto device = co_await BluetoothLEDevice::FromBluetoothAddressAsync(addr);
@@ -345,7 +378,13 @@ namespace
     }
 
 
-    concurrency::task<std::list<DiscoveredService>> ReactiveBleWindowsPlugin::DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent, uint64_t addr)
+    /**
+     * @brief Create a task to asyncrhonously obtain the services of the connected BLE device.
+     * 
+     * @param bluetoothDeviceAgent Agent for the BLE device.
+     * @return concurrency::task<std::list<DiscoveredService>> Asynchronous object which will return a list of discovered services from the BLE device.
+     */
+    concurrency::task<std::list<DiscoveredService>> ReactiveBleWindowsPlugin::DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent)
     {
         return concurrency::create_task([&]
         {
@@ -400,6 +439,12 @@ namespace
     }
 
 
+    /**
+     * @brief Handler for "connection status changed" event on connected BLE device. Currently only acts on change to the disconnected state.
+     * 
+     * @param sender The connected BLE device whose status changed.
+     * @param args Unused parameter required by the interface.
+     */
     void ReactiveBleWindowsPlugin::BluetoothLEDevice_ConnectionStatusChanged(BluetoothLEDevice sender, IInspectable args)
     {
         OutputDebugString((L"ConnectionStatusChanged " + winrt::to_hstring((int32_t)sender.ConnectionStatus()) + L"\n").c_str());
@@ -411,6 +456,11 @@ namespace
     }
 
 
+    /**
+     * @brief Cleans up/disconnects from a BLE device with given address.
+     * 
+     * @param bluetoothAddress The BLE device's address.
+     */
     void ReactiveBleWindowsPlugin::CleanConnection(uint64_t bluetoothAddress)
     {
         auto node = connectedDevices.extract(bluetoothAddress);
@@ -426,6 +476,13 @@ namespace
     }
 
 
+    /**
+     * @brief Sends an update on the connection status of a BLE device to the connected device channel.
+     * 
+     * @param address Address of the BLE device which the update is for
+     * @param state State of the BLE device, following the DeviceConnectionState enum from the
+     *              `reactive_ble_platform_interface` package's `connection_state_update.dart`.
+     */
     void ReactiveBleWindowsPlugin::SendConnectionUpdate(std::string address, DeviceConnectionState state)
     {
         DeviceInfo info;
@@ -455,7 +512,7 @@ namespace
 
 
     /**
-     * Parse BLE device address from "connectToDevice" or "disconnectFromDevice" method call arguments.
+     * @brief Parse BLE device address from "connectToDevice" or "disconnectFromDevice" method call arguments.
      * 
      * @param args The arguments passed to the invoked method call.
      * @param isConnectToDeviceRequest If the arguments are for a connection request, as opposed to a disconnection request.
