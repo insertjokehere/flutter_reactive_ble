@@ -88,8 +88,12 @@ namespace
         template <typename T>
         std::pair<std::unique_ptr<T>, std::string> ParseArgsToRequest(const flutter::EncodableValue *args);
 
+        concurrency::task<std::shared_ptr<GattReadResult>> ReadCharacteristicAsync(CharacteristicAddress &charAddr);
+
         std::unique_ptr<flutter::EventSink<EncodableValue>> connected_device_sink_;
         std::map<uint64_t, std::unique_ptr<BluetoothDeviceAgent>> connectedDevices{};
+        CharacteristicAddress characteristicAddress;
+        winrt::Windows::Storage::Streams::IBuffer characteristicBuffer;
     };
 
 
@@ -109,11 +113,6 @@ namespace
         auto connectedChannel =
             std::make_unique<flutter::EventChannel<EncodableValue>>(
                 registrar->messenger(), "flutter_reactive_ble_connected_device",
-                &flutter::StandardMethodCodec::GetInstance());
-
-        auto characteristicChannel =
-            std::make_unique<flutter::EventChannel<EncodableValue>>(
-                registrar->messenger(), "flutter_reactive_ble_char_update",
                 &flutter::StandardMethodCodec::GetInstance());
 
         auto statusChannel =
@@ -142,11 +141,9 @@ namespace
                 return plugin_pointer->OnCancel(arguments);
             });
 
-        auto charHandler = std::make_unique<flutter::BleCharHandler>();
         auto statusHandler = std::make_unique<flutter::BleStatusHandler>();
 
         connectedChannel->SetStreamHandler(std::move(handler));
-        characteristicChannel->SetStreamHandler(std::move(charHandler));
         statusChannel->SetStreamHandler(std::move(statusHandler));
 
         registrar->AddPlugin(std::move(plugin));
@@ -161,6 +158,15 @@ namespace
                 &flutter::StandardMethodCodec::GetInstance());
         std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> scanHandler = std::make_unique<flutter::BleScanHandler>();
         scanChannel->SetStreamHandler(std::move(scanHandler));
+
+        // Initialize buffer to nullpointer
+        characteristicBuffer = IBuffer();
+        auto characteristicChannel =
+            std::make_unique<flutter::EventChannel<EncodableValue>>(
+                registrar->messenger(), "flutter_reactive_ble_char_update",
+                &flutter::StandardMethodCodec::GetInstance());
+        std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> charHandler = std::make_unique<flutter::BleCharHandler>(&characteristicAddress, &characteristicBuffer);
+        characteristicChannel->SetStreamHandler(std::move(charHandler));
     }
 
 
@@ -194,34 +200,71 @@ namespace
         else if (methodName.compare("connectToDevice") == 0)
         {
             std::pair<std::unique_ptr<ConnectToDeviceRequest>, std::string> parseResult = ParseArgsToRequest<ConnectToDeviceRequest>(method_call.arguments());
-            if (parseResult.second.empty())
-            {
-                uint64_t addr = std::stoull(parseResult.first->deviceid());
-                ConnectAsync(addr);
-                result->Success();
-            }
-            else
+            if (!parseResult.second.empty())
             {
                 result->Error(parseResult.second);
+                return;
             }
+            uint64_t addr = std::stoull(parseResult.first->deviceid());
+            ConnectAsync(addr);
+            result->Success();
         }
         else if (methodName.compare("disconnectFromDevice") == 0)
         {
             std::pair<std::unique_ptr<DisconnectFromDeviceRequest>, std::string> parseResult = ParseArgsToRequest<DisconnectFromDeviceRequest>(method_call.arguments());
-            if (parseResult.second.empty())
-            {
-                uint64_t addr = std::stoull(parseResult.first->deviceid());
-                CleanConnection(addr);
-                result->Success();
-            }
-            else
+            if (!parseResult.second.empty())
             {
                 result->Error(parseResult.second);
+                return;
             }
+            uint64_t addr = std::stoull(parseResult.first->deviceid());
+            CleanConnection(addr);
+            result->Success();
         }
         else if (methodName.compare("readCharacteristic") == 0)
         {
-            result->NotImplemented();
+            std::pair<std::unique_ptr<ReadCharacteristicRequest>, std::string> parseResult = ParseArgsToRequest<ReadCharacteristicRequest>(method_call.arguments());
+            if (!parseResult.second.empty())
+            {
+                result->Error(parseResult.second);
+                return;
+            }
+            characteristicAddress = parseResult.first->characteristic();
+            auto task { ReadCharacteristicAsync(characteristicAddress) };
+            std::shared_ptr<GattReadResult> readResult = task.get();
+            if (!readResult)
+            {
+                // Null
+                result->Error("Not currently connected to selected device");
+                return;
+            }
+
+            switch (readResult->Status())
+            {
+            case GattCommunicationStatus::Unreachable:
+                result->Error("Error reading characteristic: Device unreachable.");
+                return;
+
+            case GattCommunicationStatus::ProtocolError:
+                result->Error("Error reading characteristic: Protocol error.");
+                return;
+
+            case GattCommunicationStatus::AccessDenied:
+                result->Error("Error reading characteristic: Access denied.");
+                return;
+
+            case GattCommunicationStatus::Success:
+                // Continue with reading the characteristic
+                break;
+            
+            default:
+                std::cout << "Unknown error occurred reading characteristic." << std::endl;
+                result->Error("Unknown error occurred reading characteristic.");
+                return;
+            }
+
+            characteristicBuffer = readResult->Value();
+            result->Success();  //TODO: What happens on error?
         }
         else if (methodName.compare("writeCharacteristicWithResponse") == 0)  // Async data
         {
@@ -377,7 +420,7 @@ namespace
      */
     concurrency::task<std::list<DiscoveredService>> ReactiveBleWindowsPlugin::DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent)
     {
-        return concurrency::create_task([&]
+        return concurrency::create_task([bluetoothDeviceAgent]
         {
             auto servicesResult = bluetoothDeviceAgent.device.GetGattServicesAsync().get();
             std::list<DiscoveredService> result;
@@ -534,6 +577,29 @@ namespace
 
         // ParsePartialFromArray returned false, indicating it was unable to parse the given data.
         return std::make_pair(nullptr, "Unable to parse device address.");
+    }
+
+
+    /**
+     * @brief Asynchronously get information from the relevant connected device on the characteristic with given address.
+     * 
+     * @param charAddr Address of the characteristic to get info on (contains device ID, service ID, and characteristic ID).
+     * @return concurrency::task<std::shared_ptr<GattReadResult>> Shared pointer to the returned GATT result, may be nullptr.
+     */
+    concurrency::task<std::shared_ptr<GattReadResult>> ReactiveBleWindowsPlugin::ReadCharacteristicAsync(CharacteristicAddress &charAddr)
+    {
+       return concurrency::create_task([this, charAddr]
+       {
+           uint64_t deviceAddr = std::stoull(charAddr.deviceid());
+           auto iter = connectedDevices.find(deviceAddr);
+           if (iter == connectedDevices.end())
+           {
+               return std::shared_ptr<GattReadResult>(nullptr);
+           }
+           auto gattChar = (*iter->second).GetCharacteristicAsync(charAddr.serviceuuid().data(), charAddr.characteristicuuid().data()).get();
+           auto readResult = gattChar.ReadValueAsync().get();
+           return std::make_shared<GattReadResult>(readResult);
+       });
     }
 
 } // namespace

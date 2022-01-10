@@ -266,7 +266,11 @@ class ReactiveBleWindowsPlatformFactory {
         return result;
       }),
       charUpdateChannel:
-          charEventChannel.receiveBroadcastStream().cast<List<int>>(),
+          charEventChannel.receiveBroadcastStream().map<List<int>>((e) {
+        List<int> result = [];
+        e.forEach((value) => result.add(value));
+        return result;
+      }),
       bleDeviceScanChannel:
           scanEventChannel.receiveBroadcastStream().map<List<int>>((e) {
         List<int> result = [];
