@@ -90,6 +90,8 @@ namespace
 
         concurrency::task<std::shared_ptr<GattReadResult>> ReadCharacteristicAsync(CharacteristicAddress &charAddr);
 
+        concurrency::task<std::shared_ptr<GattCommunicationStatus>> WriteCharacteristicAsync(CharacteristicAddress &charAddr, std::string value);
+
         std::unique_ptr<flutter::EventSink<EncodableValue>> connected_device_sink_;
         std::map<uint64_t, std::unique_ptr<BluetoothDeviceAgent>> connectedDevices{};
         CharacteristicAddress characteristicAddress;
@@ -199,7 +201,8 @@ namespace
         }
         else if (methodName.compare("connectToDevice") == 0)
         {
-            std::pair<std::unique_ptr<ConnectToDeviceRequest>, std::string> parseResult = ParseArgsToRequest<ConnectToDeviceRequest>(method_call.arguments());
+            std::pair<std::unique_ptr<ConnectToDeviceRequest>, std::string> parseResult =
+                ParseArgsToRequest<ConnectToDeviceRequest>(method_call.arguments());
             if (!parseResult.second.empty())
             {
                 result->Error(parseResult.second);
@@ -211,7 +214,8 @@ namespace
         }
         else if (methodName.compare("disconnectFromDevice") == 0)
         {
-            std::pair<std::unique_ptr<DisconnectFromDeviceRequest>, std::string> parseResult = ParseArgsToRequest<DisconnectFromDeviceRequest>(method_call.arguments());
+            std::pair<std::unique_ptr<DisconnectFromDeviceRequest>, std::string> parseResult =
+                ParseArgsToRequest<DisconnectFromDeviceRequest>(method_call.arguments());
             if (!parseResult.second.empty())
             {
                 result->Error(parseResult.second);
@@ -223,7 +227,8 @@ namespace
         }
         else if (methodName.compare("readCharacteristic") == 0)
         {
-            std::pair<std::unique_ptr<ReadCharacteristicRequest>, std::string> parseResult = ParseArgsToRequest<ReadCharacteristicRequest>(method_call.arguments());
+            std::pair<std::unique_ptr<ReadCharacteristicRequest>, std::string> parseResult =
+                ParseArgsToRequest<ReadCharacteristicRequest>(method_call.arguments());
             if (!parseResult.second.empty())
             {
                 result->Error(parseResult.second);
@@ -258,17 +263,64 @@ namespace
                 break;
             
             default:
-                std::cout << "Unknown error occurred reading characteristic." << std::endl;
+                std::cout << "Unknown error occurred reading characteristic." << std::endl;  // Debugging
                 result->Error("Unknown error occurred reading characteristic.");
                 return;
             }
 
             characteristicBuffer = readResult->Value();
-            result->Success();  //TODO: What happens on error?
+            result->Success();  //TODO: This method sets up for the OnListen, what happens on error in that method?
         }
-        else if (methodName.compare("writeCharacteristicWithResponse") == 0)  // Async data
+        else if (methodName.compare("writeCharacteristicWithResponse") == 0)
         {
-            result->NotImplemented();
+            std::pair<std::unique_ptr<WriteCharacteristicRequest>, std::string> parseResult =
+                ParseArgsToRequest<WriteCharacteristicRequest>(method_call.arguments());
+            if (!parseResult.second.empty())
+            {
+                result->Error(parseResult.second);
+                return;
+            }
+            CharacteristicAddress charAddr = parseResult.first->characteristic();
+            std::string value = parseResult.first->value();
+
+            auto task { WriteCharacteristicAsync(charAddr, value) };
+            std::shared_ptr<GattCommunicationStatus> writeStatus = task.get();
+
+            if (writeStatus == nullptr)
+            {
+                result->Error("Not currently connected to selected device");
+                return;
+            }
+
+            if (*writeStatus != GattCommunicationStatus::Success)
+            {
+                result->Error("Failed to write characteristic.");
+                return;
+            }
+
+            WriteCharacteristicInfo info;
+            info.mutable_characteristic()->CopyFrom(charAddr);
+
+            //TODO: Convert encoding process into method to reduce code duplication
+            size_t size = info.ByteSizeLong();
+            uint8_t *buffer = (uint8_t *)malloc(size);
+            bool success = info.SerializeToArray(buffer, size);
+            if (!success)
+            {
+                std::cout << "Failed to serialize message into buffer." << std::endl;  // Debugging
+                free(buffer);
+                result->Error("Failed to serialize message into buffer.");
+            }
+
+            EncodableList encoded;
+            for (uint32_t i = 0; i < size; i++)
+            {
+                uint8_t value = buffer[i];
+                EncodableValue encodedVal = (EncodableValue)value;
+                encoded.push_back(encodedVal);
+            }
+            free(buffer);
+            result->Success(encoded);
         }
         else if (methodName.compare("writeCharacteristicWithoutResponse") == 0)  // Async data
         {
@@ -311,39 +363,37 @@ namespace
                 result->Error("Not currently connected to selected device");
                 return;
             }
-            else
+            
+            auto task { DiscoverServicesAsync(*iter->second) };
+            std::list<DiscoveredService> data = task.get();
+
+            DiscoverServicesInfo info;
+            info.set_deviceid(deviceID);
+            for (DiscoveredService service : data)
             {
-                auto task { DiscoverServicesAsync(*iter->second) };
-                std::list<DiscoveredService> data = task.get();
-
-                DiscoverServicesInfo info;
-                info.set_deviceid(deviceID);
-                for (DiscoveredService service : data)
-                {
-                    info.add_services()->CopyFrom(service);
-                }
-                
-                size_t size = info.ByteSizeLong();
-                uint8_t *buffer = (uint8_t *)malloc(size);
-                bool success = info.SerializeToArray(buffer, size);
-                if (!success)
-                {
-                    std::cout << "Failed to serialize message into buffer." << std::endl;  // Debugging
-                    free(buffer);
-                    result->Error("Failed to serialize message into buffer.");
-                }
-
-                EncodableList encoded;
-                for (uint32_t i = 0; i < size; i++)
-                {
-                    uint8_t value = buffer[i];
-                    EncodableValue encodedVal = (EncodableValue)value;
-                    encoded.push_back(encodedVal);
-                }
-                free(buffer);
-                result->Success(encoded);
-                return;
+                info.add_services()->CopyFrom(service);
             }
+
+            size_t size = info.ByteSizeLong();
+            uint8_t *buffer = (uint8_t *)malloc(size);
+            bool success = info.SerializeToArray(buffer, size);
+            if (!success)
+            {
+                std::cout << "Failed to serialize message into buffer." << std::endl;  // Debugging
+                free(buffer);
+                result->Error("Failed to serialize message into buffer.");
+            }
+
+            EncodableList encoded;
+            for (uint32_t i = 0; i < size; i++)
+            {
+                uint8_t value = buffer[i];
+                EncodableValue encodedVal = (EncodableValue)value;
+                encoded.push_back(encodedVal);
+            }
+            free(buffer);
+            result->Success(encoded);
+            return;
         }
         else
         {
@@ -452,7 +502,7 @@ namespace
                     GattCharacteristic tmp_char = characteristics.GetAt(j);
                     GattCharacteristicProperties props = tmp_char.CharacteristicProperties();
                     DiscoveredCharacteristic tmp;
-                    
+
                     tmp.mutable_characteristicid()->set_data(to_uuidstr(tmp_char.Uuid()));
                     tmp.mutable_serviceid()->set_data(to_uuidstr(service.Uuid()));
 
@@ -583,6 +633,8 @@ namespace
     /**
      * @brief Asynchronously get information from the relevant connected device on the characteristic with given address.
      * 
+     * Returns a shared pointer such that a nullpointer may be returned on error.
+     * 
      * @param charAddr Address of the characteristic to get info on (contains device ID, service ID, and characteristic ID).
      * @return concurrency::task<std::shared_ptr<GattReadResult>> Shared pointer to the returned GATT result, may be nullptr.
      */
@@ -600,6 +652,33 @@ namespace
            auto readResult = gattChar.ReadValueAsync().get();
            return std::make_shared<GattReadResult>(readResult);
        });
+    }
+
+
+    /**
+     * @brief Asynchronously write the new value to the characteristic with given address.
+     * 
+     * @param charAddr Address of the characteristic to get info on (contains device ID, service ID, and characteristic ID).
+     * @param value The new value for the characteristic.
+     * @return concurrency::task<std::shared_ptr<GattCommunicationStatus>> Shared pointer to the returned GATT communication status, may be nullptr.
+     */
+    concurrency::task<std::shared_ptr<GattCommunicationStatus>> ReactiveBleWindowsPlugin::WriteCharacteristicAsync(CharacteristicAddress &charAddr, std::string value)
+    {
+        return concurrency::create_task([this, charAddr, value]
+        {
+            uint64_t addr = std::stoull(charAddr.deviceid());
+            auto iter = connectedDevices.find(addr);
+            if (iter == connectedDevices.end())
+            {
+                return std::shared_ptr<GattCommunicationStatus>(nullptr);
+            }
+            auto gattChar = (*iter->second).GetCharacteristicAsync(charAddr.serviceuuid().data(), charAddr.characteristicuuid().data()).get();
+            DataWriter writer;
+            writer.WriteString(winrt::to_hstring(value));
+            IBuffer buf = writer.DetachBuffer();
+            auto writeStatus = gattChar.WriteValueAsync(buf, GattWriteOption::WriteWithResponse).get();
+            return std::make_shared<GattCommunicationStatus>(writeStatus);
+        });
     }
 
 } // namespace

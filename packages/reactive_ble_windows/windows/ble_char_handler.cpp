@@ -45,7 +45,6 @@ namespace flutter
 
     /**
      * @brief Encode and send info on a characteristic, assuming non-null address and buffer.
-     * 
      */
     void BleCharHandler::SendCharacteristicInfo()
     {
@@ -54,11 +53,11 @@ namespace flutter
 
         auto reader = winrt::Windows::Storage::Streams::DataReader::FromBuffer(*characteristicBuffer);
         reader.UnicodeEncoding(winrt::Windows::Storage::Streams::UnicodeEncoding::Utf8);
-        winrt::hstring value = reader.ReadString(characteristicBuffer->Length());
-        std::string strVal = to_string(value);
+        winrt::hstring writeValue = reader.ReadString(characteristicBuffer->Length());
+        std::string strVal = to_string(writeValue);
 
         // Protobuf expects an array of bytes, which are equivalent to strings
-        for (size_t i = 0; i < value.size(); i++)
+        for (size_t i = 0; i < writeValue.size(); i++)
         {
             info.mutable_value()->push_back(strVal[i]);
         }
