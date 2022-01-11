@@ -90,7 +90,7 @@ namespace
 
         concurrency::task<std::shared_ptr<GattReadResult>> ReadCharacteristicAsync(CharacteristicAddress &charAddr);
 
-        concurrency::task<std::shared_ptr<GattCommunicationStatus>> WriteCharacteristicAsync(CharacteristicAddress &charAddr, std::string value);
+        concurrency::task<std::shared_ptr<GattCommunicationStatus>> WriteCharacteristicAsync(CharacteristicAddress &charAddr, std::string value, bool withResponse);
 
         std::unique_ptr<flutter::EventSink<EncodableValue>> connected_device_sink_;
         std::map<uint64_t, std::unique_ptr<BluetoothDeviceAgent>> connectedDevices{};
@@ -271,8 +271,9 @@ namespace
             characteristicBuffer = readResult->Value();
             result->Success();  //TODO: This method sets up for the OnListen, what happens on error in that method?
         }
-        else if (methodName.compare("writeCharacteristicWithResponse") == 0)
+        else if (methodName.compare("writeCharacteristicWithResponse") == 0 || methodName.compare("writeCharacteristicWithoutResponse") == 0)
         {
+            bool withResponse = methodName.compare("writeCharacteristicWithResponse") == 0;
             std::pair<std::unique_ptr<WriteCharacteristicRequest>, std::string> parseResult =
                 ParseArgsToRequest<WriteCharacteristicRequest>(method_call.arguments());
             if (!parseResult.second.empty())
@@ -283,7 +284,7 @@ namespace
             CharacteristicAddress charAddr = parseResult.first->characteristic();
             std::string value = parseResult.first->value();
 
-            auto task { WriteCharacteristicAsync(charAddr, value) };
+            auto task { WriteCharacteristicAsync(charAddr, value, withResponse) };
             std::shared_ptr<GattCommunicationStatus> writeStatus = task.get();
 
             if (writeStatus == nullptr || *writeStatus != GattCommunicationStatus::Success)
@@ -315,10 +316,6 @@ namespace
             }
             free(buffer);
             result->Success(encoded);
-        }
-        else if (methodName.compare("writeCharacteristicWithoutResponse") == 0)  // Async data
-        {
-            result->NotImplemented();
         }
         else if (methodName.compare("readNotifications") == 0)
         {
@@ -658,11 +655,13 @@ namespace
      * 
      * @param charAddr Address of the characteristic to get info on (contains device ID, service ID, and characteristic ID).
      * @param value The new value for the characteristic.
+     * @param withResponse If the write operation should return a response.
      * @return concurrency::task<std::shared_ptr<GattCommunicationStatus>> Shared pointer to the returned GATT communication status, may be nullptr.
      */
-    concurrency::task<std::shared_ptr<GattCommunicationStatus>> ReactiveBleWindowsPlugin::WriteCharacteristicAsync(CharacteristicAddress &charAddr, std::string value)
+    concurrency::task<std::shared_ptr<GattCommunicationStatus>> ReactiveBleWindowsPlugin::WriteCharacteristicAsync(
+        CharacteristicAddress &charAddr, std::string value, bool withResponse)
     {
-        return concurrency::create_task([this, charAddr, value]
+        return concurrency::create_task([this, charAddr, value, withResponse]
         {
             uint64_t addr = std::stoull(charAddr.deviceid());
             auto iter = connectedDevices.find(addr);
@@ -675,7 +674,8 @@ namespace
             writer.WriteString(winrt::to_hstring(value));
             IBuffer buf = writer.DetachBuffer();
             try {
-                GattCommunicationStatus writeStatus = gattChar.WriteValueAsync(buf, GattWriteOption::WriteWithResponse).get();
+                GattCommunicationStatus writeStatus =
+                    gattChar.WriteValueAsync(buf, (withResponse) ? GattWriteOption::WriteWithResponse : GattWriteOption::WriteWithoutResponse).get();
                 return std::make_shared<GattCommunicationStatus>(writeStatus);
             } catch (...) {
                 std::cerr << "Failed to write to characteristic. Can it be written to?" << std::endl;  // Debugging

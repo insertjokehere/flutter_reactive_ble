@@ -147,14 +147,14 @@ class ReactiveBleWindowsPlatform extends ReactiveBlePlatform {
     List<int> value,
   ) async =>
       _bleMethodChannel
-          .invokeMethod<List<int>>(
+          .invokeMethod(
             "writeCharacteristicWithoutResponse",
             _argsToProtobufConverter
                 .createWriteChacracteristicRequest(characteristic, value)
                 .writeToBuffer(),
           )
-          .then(
-              (data) => _protobufConverter.writeCharacteristicInfoFrom(data!));
+          .then((data) => _protobufConverter
+              .writeCharacteristicInfoFrom(List<int>.from(data!)));
 
   @override
   Stream<void> subscribeToNotifications(
