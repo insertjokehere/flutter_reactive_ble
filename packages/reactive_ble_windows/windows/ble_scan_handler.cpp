@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
 
 #include <sstream>
 
@@ -96,6 +97,32 @@ namespace flutter
         return nullptr;
     }
 
+ 
+    winrt::fire_and_forget GetNameAsync(uint64_t addr)
+    {
+        BluetoothLEDevice device = co_await BluetoothLEDevice::FromBluetoothAddressAsync(addr);
+        auto serviceResult = co_await device.GetGattServicesAsync();
+
+        for (auto _tmp : serviceResult.Services()) {
+            // 0x1800 is the GAP service
+            if(_tmp.Uuid().Data1 == 6144) {
+                auto charResult = co_await _tmp.GetCharacteristicsAsync();
+                for(auto _tmp2 : charResult.Characteristics()) {
+
+                    if(_tmp2.Uuid().Data1 == 10752) {
+                        auto value = co_await _tmp2.ReadValueAsync();
+                        IBuffer val = value.Value();
+
+                        auto reader = DataReader::FromBuffer(val);
+                        auto result = std::vector<uint8_t>(reader.UnconsumedBufferLength());
+                        reader.ReadBytes(result);
+                        std::string txt (result.begin(), result.end());
+                        std::cout << txt << std::endl;
+                    } 
+                }
+            }
+        }
+    }
 
     /**
      * @brief Callback for when a BLE advertisement has been received.
@@ -115,6 +142,10 @@ namespace flutter
             std::stringstream sstream;
             sstream << std::hex << args.BluetoothAddress();
             std::string localName = winrt::to_string(args.Advertisement().LocalName());
+
+            if(localName.empty()) {
+                GetNameAsync(args.BluetoothAddress());
+            }
 
             DeviceScanInfo info;
             info.set_id(std::to_string(args.BluetoothAddress()));
