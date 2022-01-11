@@ -286,13 +286,7 @@ namespace
             auto task { WriteCharacteristicAsync(charAddr, value) };
             std::shared_ptr<GattCommunicationStatus> writeStatus = task.get();
 
-            if (writeStatus == nullptr)
-            {
-                result->Error("Not currently connected to selected device");
-                return;
-            }
-
-            if (*writeStatus != GattCommunicationStatus::Success)
+            if (writeStatus == nullptr || *writeStatus != GattCommunicationStatus::Success)
             {
                 result->Error("Failed to write characteristic.");
                 return;
@@ -634,6 +628,7 @@ namespace
      * @brief Asynchronously get information from the relevant connected device on the characteristic with given address.
      * 
      * Returns a shared pointer such that a nullpointer may be returned on error.
+     * Cannot return a unique pointer, as it will fail to compile - attempting to reference a deleted function.
      * 
      * @param charAddr Address of the characteristic to get info on (contains device ID, service ID, and characteristic ID).
      * @return concurrency::task<std::shared_ptr<GattReadResult>> Shared pointer to the returned GATT result, may be nullptr.
@@ -658,6 +653,9 @@ namespace
     /**
      * @brief Asynchronously write the new value to the characteristic with given address.
      * 
+     * Returns a shared pointer such that a nullpointer may be returned on error.
+     * Cannot return a unique pointer, as it will fail to compile - attempting to reference a deleted function.
+     * 
      * @param charAddr Address of the characteristic to get info on (contains device ID, service ID, and characteristic ID).
      * @param value The new value for the characteristic.
      * @return concurrency::task<std::shared_ptr<GattCommunicationStatus>> Shared pointer to the returned GATT communication status, may be nullptr.
@@ -676,8 +674,13 @@ namespace
             DataWriter writer;
             writer.WriteString(winrt::to_hstring(value));
             IBuffer buf = writer.DetachBuffer();
-            auto writeStatus = gattChar.WriteValueAsync(buf, GattWriteOption::WriteWithResponse).get();
-            return std::make_shared<GattCommunicationStatus>(writeStatus);
+            try {
+                GattCommunicationStatus writeStatus = gattChar.WriteValueAsync(buf, GattWriteOption::WriteWithResponse).get();
+                return std::make_shared<GattCommunicationStatus>(writeStatus);
+            } catch (...) {
+                std::cerr << "Failed to write to characteristic. Can it be written to?" << std::endl;  // Debugging
+                return std::shared_ptr<GattCommunicationStatus>(nullptr);
+            }
         });
     }
 

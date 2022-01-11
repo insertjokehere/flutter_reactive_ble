@@ -3,6 +3,8 @@
 #include <windows.h>
 #include <winrt/Windows.Foundation.Collections.h>
 
+#include <sstream>
+
 namespace flutter
 {
     using namespace winrt::Windows::Foundation;
@@ -110,9 +112,14 @@ namespace flutter
             auto manufacturer_data = parseManufacturerData(args.Advertisement());
             std::string str(manufacturer_data.begin(), manufacturer_data.end());
 
+            std::stringstream sstream;
+            sstream << std::hex << args.BluetoothAddress();
+            std::string localName = winrt::to_string(args.Advertisement().LocalName());
+
             DeviceScanInfo info;
             info.set_id(std::to_string(args.BluetoothAddress()));
-            info.set_name(winrt::to_string(args.Advertisement().LocalName()));
+            // If the local name is empty, use a hex representation of the device address
+            info.set_name((localName.empty()) ? sstream.str() : localName);
             info.set_manufacturerdata(str);
             info.add_serviceuuids();
             info.add_servicedata();
