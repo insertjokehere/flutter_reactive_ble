@@ -15,6 +15,8 @@
 #include <map>
 #include <algorithm>
 
+#include "../lib/src/generated/bledata.pb.h"
+
 namespace
 {
     using namespace winrt::Windows::Foundation;
@@ -54,6 +56,7 @@ namespace
         std::map<std::string, GattDeviceService> gattServices;
         std::map<std::string, GattCharacteristic> gattCharacteristics;
         std::map<std::string, winrt::event_token> valueChangedTokens;
+        std::map<std::string, CharacteristicAddress> subscribedCharacteristicsAddresses;
 
         BluetoothDeviceAgent(BluetoothLEDevice device, winrt::event_token connnectionStatusChangedToken)
             : device(device),

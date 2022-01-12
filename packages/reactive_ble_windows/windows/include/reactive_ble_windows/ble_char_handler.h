@@ -25,10 +25,12 @@ namespace flutter
         BleCharHandler() {}
         virtual ~BleCharHandler() = default;
 
-        BleCharHandler(CharacteristicAddress* charAddr, winrt::Windows::Storage::Streams::IBuffer* buf)
+        // BleCharHandler(CharacteristicAddress* charAddr, winrt::Windows::Storage::Streams::IBuffer* buf)
+        BleCharHandler(CharacteristicAddress* charAddr, winrt::Windows::Storage::Streams::IBuffer* buf, std::shared_ptr<flutter::EventSink<EncodableValue>> pSink)
         {
             characteristicAddress = charAddr;
             characteristicBuffer = buf;
+            characteristic_sink_ = pSink;
         };
 
         // Prevent copying.
@@ -45,7 +47,8 @@ namespace flutter
 
         void SendCharacteristicInfo();
 
-        std::unique_ptr<flutter::EventSink<EncodableValue>> characteristic_sink_;
+        // std::unique_ptr<flutter::EventSink<EncodableValue>> characteristic_sink_;
+        std::shared_ptr<flutter::EventSink<EncodableValue>> characteristic_sink_;
         CharacteristicAddress* characteristicAddress;
         winrt::Windows::Storage::Streams::IBuffer* characteristicBuffer;
     };

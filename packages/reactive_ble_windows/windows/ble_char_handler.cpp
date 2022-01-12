@@ -26,11 +26,12 @@ namespace flutter
     std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleCharHandler::OnListenInternal(
         const EncodableValue *arguments, std::unique_ptr<flutter::EventSink<EncodableValue>> &&events)
     {
+        std::cout << "on listen" << std::endl;
         characteristic_sink_ = std::move(events);
-        if (characteristicAddress != nullptr && characteristicBuffer != nullptr)
-        {
-            SendCharacteristicInfo();
-        }
+        // if (characteristicAddress != nullptr && characteristicBuffer != nullptr)
+        // {
+        //     SendCharacteristicInfo();
+        // }
         return nullptr;
     }
 
@@ -38,6 +39,7 @@ namespace flutter
     std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleCharHandler::OnCancelInternal(
         const EncodableValue *arguments)
     {
+        std::cout << "on cancel" << std::endl;
         characteristic_sink_ = nullptr;
         return nullptr;
     }
