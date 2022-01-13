@@ -3,6 +3,9 @@
 #include <windows.h>
 #include <winrt/Windows.Foundation.Collections.h>
 
+#include "include/reactive_ble_windows/ble_utils.h"
+
+
 namespace flutter
 {
     using namespace winrt::Windows::Foundation;
@@ -26,12 +29,12 @@ namespace flutter
     std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleCharHandler::OnListenInternal(
         const EncodableValue *arguments, std::unique_ptr<flutter::EventSink<EncodableValue>> &&events)
     {
-        std::cout << "on listen" << std::endl;
         characteristic_sink_ = std::move(events);
-        // if (characteristicAddress != nullptr && characteristicBuffer != nullptr)
-        // {
-        //     SendCharacteristicInfo();
-        // }
+        if (*callingMethod == CallingMethod::read)
+        {
+            SendCharacteristicInfo();
+            *callingMethod = CallingMethod::none;
+        }
         return nullptr;
     }
 
@@ -39,7 +42,6 @@ namespace flutter
     std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleCharHandler::OnCancelInternal(
         const EncodableValue *arguments)
     {
-        std::cout << "on cancel" << std::endl;
         characteristic_sink_ = nullptr;
         return nullptr;
     }

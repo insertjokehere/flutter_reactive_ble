@@ -16,7 +16,31 @@
 
 namespace flutter
 {
-    class EncodableValue;
+    /*
+    *  As the characteristic handler's OnListen/OnCancel methods get called for multiple method calls,
+    *  this enum is used to differentiate between which method was called and hence how the handler should behave.
+    * 
+    *  TODO: Can this just be a bool? Is special handling needed in any case other than read vs not read?
+    */
+    enum CallingMethod
+    {
+        read,
+        notify,
+        unsubscribe,
+        none
+    };
+
+
+    /*
+    *  Container for the pointers which get passed to the characteristic handler.
+    */
+    struct CharHandlerPtrs
+    {
+        CharacteristicAddress* address;
+        winrt::Windows::Storage::Streams::IBuffer* buffer;
+        std::shared_ptr<flutter::EventSink<EncodableValue>> sink;
+        CallingMethod* callingMethod;
+    };
 
 
     class BleCharHandler : public StreamHandler<EncodableValue>
@@ -25,12 +49,12 @@ namespace flutter
         BleCharHandler() {}
         virtual ~BleCharHandler() = default;
 
-        // BleCharHandler(CharacteristicAddress* charAddr, winrt::Windows::Storage::Streams::IBuffer* buf)
-        BleCharHandler(CharacteristicAddress* charAddr, winrt::Windows::Storage::Streams::IBuffer* buf, std::shared_ptr<flutter::EventSink<EncodableValue>> pSink)
+        BleCharHandler(CharHandlerPtrs ptrs)
         {
-            characteristicAddress = charAddr;
-            characteristicBuffer = buf;
-            characteristic_sink_ = pSink;
+            characteristicAddress = ptrs.address;
+            characteristicBuffer = ptrs.buffer;
+            characteristic_sink_ = ptrs.sink;
+            callingMethod = ptrs.callingMethod;
         };
 
         // Prevent copying.
@@ -47,10 +71,10 @@ namespace flutter
 
         void SendCharacteristicInfo();
 
-        // std::unique_ptr<flutter::EventSink<EncodableValue>> characteristic_sink_;
-        std::shared_ptr<flutter::EventSink<EncodableValue>> characteristic_sink_;
         CharacteristicAddress* characteristicAddress;
         winrt::Windows::Storage::Streams::IBuffer* characteristicBuffer;
+        std::shared_ptr<flutter::EventSink<EncodableValue>> characteristic_sink_;
+        CallingMethod* callingMethod;
     };
 
 } // namespace flutter

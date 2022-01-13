@@ -16,6 +16,7 @@
 #include <algorithm>
 
 #include "../lib/src/generated/bledata.pb.h"
+#include "include/reactive_ble_windows/ble_utils.h"
 
 namespace
 {
@@ -27,23 +28,6 @@ namespace
 
     using flutter::EncodableMap;
     using flutter::EncodableValue;
-
-    #define GUID_FORMAT "%08x-%04hx-%04hx-%02hhx%02hhx-%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx"
-    #define GUID_ARG(guid) guid.Data1, guid.Data2, guid.Data3, guid.Data4[0], guid.Data4[1], guid.Data4[2], guid.Data4[3], guid.Data4[4], guid.Data4[5], guid.Data4[6], guid.Data4[7]
-
-
-    /**
-     * @brief Converts winrt::guid to std::string.
-     * 
-     * @param guid GUID to be converted.
-     * @return std::string GUID in string format, according to GUID_FORMAT and GUID_ARG structure.
-     */
-    std::string to_uuidstr(winrt::guid guid)
-    {
-        char chars[36 + 1];
-        sprintf_s(chars, GUID_FORMAT, GUID_ARG(guid));
-        return std::string{chars};
-    }
 
 
     /**
@@ -84,7 +68,7 @@ namespace
 
                 for (auto s : serviceResult.Services())
                 {
-                    if (to_uuidstr(s.Uuid()) == service) gattServices.insert(std::make_pair(service, s));
+                    if (BleUtils::to_uuidstr(s.Uuid()) == service) gattServices.insert(std::make_pair(service, s));
                 }
             }
             co_return gattServices.at(service);
@@ -109,7 +93,7 @@ namespace
 
                 for (auto c : characteristicResult.Characteristics())
                 {
-                    if (to_uuidstr(c.Uuid()) == characteristic) gattCharacteristics.insert(std::make_pair(characteristic, c));
+                    if (BleUtils::to_uuidstr(c.Uuid()) == characteristic) gattCharacteristics.insert(std::make_pair(characteristic, c));
                 }
             }
             co_return gattCharacteristics.at(characteristic);

@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <winrt/Windows.Devices.Bluetooth.h>
 #include <winrt/Windows.Devices.Bluetooth.Advertisement.h>
+#include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
 #include <winrt/Windows.Devices.Radios.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -27,6 +28,7 @@
 #include "include/reactive_ble_windows/ble_char_handler.h"
 #include "include/reactive_ble_windows/ble_scan_handler.h"
 #include "include/reactive_ble_windows/ble_status_handler.h"
+#include "include/reactive_ble_windows/ble_utils.h"
 #include "bluetooth_device_agent.cpp"
 
 namespace
@@ -37,6 +39,7 @@ namespace
 
     using namespace winrt::Windows::Devices::Bluetooth;
     using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
+    using namespace winrt::Windows::Devices::Bluetooth::GenericAttributeProfile;
     using namespace winrt::Windows::Foundation;
     using namespace winrt::Windows::Storage::Streams;
 
@@ -98,9 +101,11 @@ namespace
 
         std::unique_ptr<flutter::EventSink<EncodableValue>> connected_device_sink_;
         std::map<uint64_t, std::unique_ptr<BluetoothDeviceAgent>> connectedDevices{};
+
         CharacteristicAddress characteristicAddress;
         winrt::Windows::Storage::Streams::IBuffer characteristicBuffer;
         std::shared_ptr<flutter::EventSink<EncodableValue>> characteristicSink;
+        flutter::CallingMethod callingMethod;
     };
 
 
@@ -166,14 +171,20 @@ namespace
         std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> scanHandler = std::make_unique<flutter::BleScanHandler>();
         scanChannel->SetStreamHandler(std::move(scanHandler));
 
-        // Initialize buffer to nullpointer
         characteristicBuffer = IBuffer();
+        callingMethod = flutter::CallingMethod::none;
+
+        flutter::CharHandlerPtrs ptrs;
+        ptrs.address = &characteristicAddress;
+        ptrs.buffer = &characteristicBuffer;
+        ptrs.sink = characteristicSink;
+        ptrs.callingMethod = &callingMethod;
+
         auto characteristicChannel =
             std::make_unique<flutter::EventChannel<EncodableValue>>(
                 registrar->messenger(), "flutter_reactive_ble_char_update",
                 &flutter::StandardMethodCodec::GetInstance());
-        // std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> charHandler = std::make_unique<flutter::BleCharHandler>(&characteristicAddress, &characteristicBuffer);
-        std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> charHandler = std::make_unique<flutter::BleCharHandler>(&characteristicAddress, &characteristicBuffer, characteristicSink);
+        std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> charHandler = std::make_unique<flutter::BleCharHandler>(ptrs);
         characteristicChannel->SetStreamHandler(std::move(charHandler));
     }
 
@@ -275,6 +286,7 @@ namespace
             }
 
             characteristicBuffer = readResult->Value();
+            callingMethod = flutter::CallingMethod::read;
             result->Success();  //TODO: This method sets up for the OnListen, what happens on error in that method?
         }
         else if (methodName.compare("writeCharacteristicWithResponse") == 0 || methodName.compare("writeCharacteristicWithoutResponse") == 0)
@@ -337,6 +349,7 @@ namespace
             bool success = task.get();
             if (success)
             {
+                callingMethod = flutter::CallingMethod::notify;
                 result->Success();
             }
             else
@@ -346,6 +359,7 @@ namespace
         }
         else if (methodName.compare("stopNotifications") == 0)
         {
+            callingMethod = flutter::CallingMethod::unsubscribe;
             result->NotImplemented();
         }
         else if (methodName.compare("negotiateMtuSize") == 0)  // Async data
@@ -493,20 +507,20 @@ namespace
                 OutputDebugString((L"GetGattServicesAsync error: " + winrt::to_hstring((int32_t)servicesResult.Status()) + L"\n").c_str());
                 return result;
             }
-            IVectorView<GattDeviceService> services = servicesResult.Services();
+            winrt::Windows::Foundation::Collections::IVectorView<GattDeviceService> services = servicesResult.Services();
             DiscoveredService converted;
 
             for (size_t i = 0; i < services.Size(); i++)
             {
                 GattDeviceService const service = services.GetAt(i);
-                converted.mutable_serviceuuid()->set_data(to_uuidstr(service.Uuid()));
+                converted.mutable_serviceuuid()->set_data(BleUtils::to_uuidstr(service.Uuid()));
 
                 winrt::Windows::Foundation::Collections::IVectorView includedServices = service.GetIncludedServicesAsync().get().Services();
                 converted.add_includedservices();
                 for (size_t j = 0; j < includedServices.Size(); j++)            
                 {
                     DiscoveredService tmp;
-                    tmp.mutable_serviceuuid()->set_data(to_uuidstr(includedServices.GetAt(j).Uuid()));
+                    tmp.mutable_serviceuuid()->set_data(BleUtils::to_uuidstr(includedServices.GetAt(j).Uuid()));
                     converted.add_includedservices()->CopyFrom(tmp);
                 }
 
@@ -517,8 +531,8 @@ namespace
                     GattCharacteristicProperties props = tmp_char.CharacteristicProperties();
                     DiscoveredCharacteristic tmp;
 
-                    tmp.mutable_characteristicid()->set_data(to_uuidstr(tmp_char.Uuid()));
-                    tmp.mutable_serviceid()->set_data(to_uuidstr(service.Uuid()));
+                    tmp.mutable_characteristicid()->set_data(BleUtils::to_uuidstr(tmp_char.Uuid()));
+                    tmp.mutable_serviceid()->set_data(BleUtils::to_uuidstr(service.Uuid()));
 
                     tmp.set_isreadable((props & GattCharacteristicProperties::Read) != GattCharacteristicProperties::None);
                     tmp.set_iswritablewithresponse((props & GattCharacteristicProperties::Write) != GattCharacteristicProperties::None);
@@ -749,11 +763,12 @@ namespace
     {
         if (characteristicSink == nullptr)
         {
-            std::cerr << "Characteristic sink not initialized by handler" << std::endl;
+            std::cerr << "Characteristic sink not yet initialized by handler." << std::endl;
+            characteristicSink->EventSink::Error("Received notification but could not send to Flutter.");
             return;
         }
 
-        std::string uuid = to_uuidstr(sender.Uuid());
+        std::string uuid = BleUtils::to_uuidstr(sender.Uuid());
         IBuffer characteristicValue = args.CharacteristicValue();
         auto reader = winrt::Windows::Storage::Streams::DataReader::FromBuffer(characteristicValue);
         reader.UnicodeEncoding(winrt::Windows::Storage::Streams::UnicodeEncoding::Utf8);
@@ -762,14 +777,22 @@ namespace
 
         GattDeviceService service = sender.Service();
         std::string deviceID = to_string(service.DeviceId());
-        std::string serviceUUID = to_uuidstr(service.Uuid());
+        std::string serviceUUID = BleUtils::to_uuidstr(service.Uuid());
 
         // Retrieve old characteristic address
         auto iter = connectedDevices.find(std::stoull(deviceID));
-        if (iter == connectedDevices.end()) return;
+        if (iter == connectedDevices.end())
+        {
+            characteristicSink->EventSink::Error("Not currently connected to device.");
+            return;
+        }
         auto subscribedMap = (*iter->second).subscribedCharacteristicsAddresses;
         auto subIter = subscribedMap.find(deviceID);
-        if (subIter == subscribedMap.end()) return;
+        if (subIter == subscribedMap.end())
+        {
+            characteristicSink->EventSink::Error("Could not obtain address of characteristic for received notification.");
+            return;
+        }
         CharacteristicAddress charAddr = subIter->second;
 
         // Update characteristic address with changed values
