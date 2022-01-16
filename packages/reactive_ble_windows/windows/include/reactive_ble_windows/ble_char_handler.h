@@ -38,7 +38,7 @@ namespace flutter
     {
         CharacteristicAddress* address;
         winrt::Windows::Storage::Streams::IBuffer* buffer;
-        std::shared_ptr<flutter::EventSink<EncodableValue>> sink;
+        flutter::EventSink<EncodableValue>* sink;
         CallingMethod* callingMethod;
     };
 
@@ -73,7 +73,7 @@ namespace flutter
 
         CharacteristicAddress* characteristicAddress;
         winrt::Windows::Storage::Streams::IBuffer* characteristicBuffer;
-        std::shared_ptr<flutter::EventSink<EncodableValue>> characteristic_sink_;
+        flutter::EventSink<EncodableValue>* characteristic_sink_;
         CallingMethod* callingMethod;
     };
 

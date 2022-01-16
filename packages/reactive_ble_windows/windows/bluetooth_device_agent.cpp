@@ -40,7 +40,7 @@ namespace
         std::map<std::string, GattDeviceService> gattServices;
         std::map<std::string, GattCharacteristic> gattCharacteristics;
         std::map<std::string, winrt::event_token> valueChangedTokens;
-        std::map<std::string, CharacteristicAddress> subscribedCharacteristicsAddresses;
+        std::map<uint64_t, CharacteristicAddress> subscribedCharacteristicsAddresses;
 
         BluetoothDeviceAgent(BluetoothLEDevice device, winrt::event_token connnectionStatusChangedToken)
             : device(device),

@@ -104,7 +104,7 @@ namespace
 
         CharacteristicAddress characteristicAddress;
         winrt::Windows::Storage::Streams::IBuffer characteristicBuffer;
-        std::shared_ptr<flutter::EventSink<EncodableValue>> characteristicSink;
+        flutter::EventSink<EncodableValue>* characteristicSink;
         flutter::CallingMethod callingMethod;
     };
 
@@ -744,16 +744,18 @@ namespace
 
             if (descriptor == GattClientCharacteristicConfigurationDescriptorValue::Notify)
             {
+                agent.subscribedCharacteristicsAddresses[addr] = charAddr;
                 agent.valueChangedTokens[deviceID] = gattChar.ValueChanged({this, &ReactiveBleWindowsPlugin::GattCharacteristic_ValueChanged});
-                agent.subscribedCharacteristicsAddresses[deviceID] = charAddr;
             }
             else
             {
                 // Remove token to stop receiving notifications
                 gattChar.ValueChanged(std::exchange(agent.valueChangedTokens[deviceID], {}));
-                agent.subscribedCharacteristicsAddresses.erase(deviceID);
+                agent.subscribedCharacteristicsAddresses.erase(addr);
             }
 
+            // Update connectedDevices map with changed agent
+            connectedDevices[addr] = std::make_unique<BluetoothDeviceAgent>(agent);
             return true;
         });
     }
@@ -763,8 +765,7 @@ namespace
     {
         if (characteristicSink == nullptr)
         {
-            std::cerr << "Characteristic sink not yet initialized by handler." << std::endl;
-            characteristicSink->EventSink::Error("Received notification but could not send to Flutter.");
+            std::cerr << "Error: Characteristic sink not yet initialized by handler." << std::endl;
             return;
         }
 
@@ -772,22 +773,23 @@ namespace
         IBuffer characteristicValue = args.CharacteristicValue();
         auto reader = winrt::Windows::Storage::Streams::DataReader::FromBuffer(characteristicValue);
         reader.UnicodeEncoding(winrt::Windows::Storage::Streams::UnicodeEncoding::Utf8);
-        winrt::hstring writeValue = reader.ReadString(characteristicBuffer.Length());
+        winrt::hstring writeValue = reader.ReadString(characteristicValue.Length());
         std::string strVal = to_string(writeValue);
 
         GattDeviceService service = sender.Service();
-        std::string deviceID = to_string(service.DeviceId());
+        uint64_t bluetoothAddr = service.Device().BluetoothAddress();
+        std::string addrString = to_string(winrt::to_hstring(bluetoothAddr));
         std::string serviceUUID = BleUtils::to_uuidstr(service.Uuid());
 
         // Retrieve old characteristic address
-        auto iter = connectedDevices.find(std::stoull(deviceID));
+        auto iter = connectedDevices.find(bluetoothAddr);
         if (iter == connectedDevices.end())
         {
             characteristicSink->EventSink::Error("Not currently connected to device.");
             return;
         }
         auto subscribedMap = (*iter->second).subscribedCharacteristicsAddresses;
-        auto subIter = subscribedMap.find(deviceID);
+        auto subIter = subscribedMap.find(bluetoothAddr);
         if (subIter == subscribedMap.end())
         {
             characteristicSink->EventSink::Error("Could not obtain address of characteristic for received notification.");
@@ -824,8 +826,9 @@ namespace
             EncodableValue encodedVal = (EncodableValue)value;
             result.push_back(encodedVal);
         }
-
+        std::cout << "About to send success to sink" << std::endl;
         characteristicSink->EventSink::Success(result);
+        std::cout << "success" << std::endl;
         free(buffer);
     }
 

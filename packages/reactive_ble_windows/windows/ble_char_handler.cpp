@@ -29,7 +29,8 @@ namespace flutter
     std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleCharHandler::OnListenInternal(
         const EncodableValue *arguments, std::unique_ptr<flutter::EventSink<EncodableValue>> &&events)
     {
-        characteristic_sink_ = std::move(events);
+        std::cout << "OnListen" << std::endl;
+        characteristic_sink_ = events.release();
         if (*callingMethod == CallingMethod::read)
         {
             SendCharacteristicInfo();
@@ -42,6 +43,7 @@ namespace flutter
     std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleCharHandler::OnCancelInternal(
         const EncodableValue *arguments)
     {
+        std::cout << "OnCancel" << std::endl;
         characteristic_sink_ = nullptr;
         return nullptr;
     }
