@@ -11,8 +11,10 @@
 #include <winrt/Windows.Devices.Bluetooth.Advertisement.h>
 #include <winrt/Windows.Devices.Radios.h>
 #include <winrt/Windows.Storage.Streams.h>
+#include <ppltasks.h>
 
 #include "../lib/src/generated/bledata.pb.h"
+#include "../../bluetooth_device_agent.cpp"
 
 namespace flutter
 {
@@ -38,8 +40,8 @@ namespace flutter
     {
         CharacteristicAddress* address;
         winrt::Windows::Storage::Streams::IBuffer* buffer;
-        flutter::EventSink<EncodableValue>* sink;
         CallingMethod* callingMethod;
+        std::map<uint64_t, std::shared_ptr<BluetoothDeviceAgent>>* connectedDevices;
     };
 
 
@@ -53,8 +55,8 @@ namespace flutter
         {
             characteristicAddress = ptrs.address;
             characteristicBuffer = ptrs.buffer;
-            characteristic_sink_ = ptrs.sink;
             callingMethod = ptrs.callingMethod;
+            connectedDevices = ptrs.connectedDevices;
         };
 
         // Prevent copying.
@@ -69,12 +71,19 @@ namespace flutter
         virtual std::unique_ptr<StreamHandlerError<>> OnCancelInternal(
             const EncodableValue *arguments);
 
+        void EncodeAndSend(CharacteristicValueInfo info);
+
         void SendCharacteristicInfo();
+
+        concurrency::task<bool> SetNotifiableAsync(CharacteristicAddress charAddr, GattClientCharacteristicConfigurationDescriptorValue descriptor);
+
+        void GattCharacteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args);
 
         CharacteristicAddress* characteristicAddress;
         winrt::Windows::Storage::Streams::IBuffer* characteristicBuffer;
-        flutter::EventSink<EncodableValue>* characteristic_sink_;
+        std::unique_ptr<flutter::EventSink<EncodableValue>> characteristic_sink_;
         CallingMethod* callingMethod;
+        std::map<uint64_t, std::shared_ptr<BluetoothDeviceAgent>>* connectedDevices;
     };
 
 } // namespace flutter

@@ -29,7 +29,7 @@
 #include "include/reactive_ble_windows/ble_scan_handler.h"
 #include "include/reactive_ble_windows/ble_status_handler.h"
 #include "include/reactive_ble_windows/ble_utils.h"
-#include "bluetooth_device_agent.cpp"
+#include "include/reactive_ble_windows/bluetooth_device_agent.h"
 
 namespace
 {
@@ -95,12 +95,8 @@ namespace
 
         concurrency::task<std::shared_ptr<GattCommunicationStatus>> WriteCharacteristicAsync(CharacteristicAddress &charAddr, std::string value, bool withResponse);
 
-        concurrency::task<bool> ReactiveBleWindowsPlugin::SetNotifiableAsync(CharacteristicAddress charAddr, GattClientCharacteristicConfigurationDescriptorValue descriptor);
-
-        void ReactiveBleWindowsPlugin::GattCharacteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args);
-
         std::unique_ptr<flutter::EventSink<EncodableValue>> connected_device_sink_;
-        std::map<uint64_t, std::unique_ptr<BluetoothDeviceAgent>> connectedDevices{};
+        std::map<uint64_t, std::shared_ptr<BluetoothDeviceAgent>> connectedDevices{};
 
         CharacteristicAddress characteristicAddress;
         winrt::Windows::Storage::Streams::IBuffer characteristicBuffer;
@@ -177,8 +173,8 @@ namespace
         flutter::CharHandlerPtrs ptrs;
         ptrs.address = &characteristicAddress;
         ptrs.buffer = &characteristicBuffer;
-        ptrs.sink = characteristicSink;
         ptrs.callingMethod = &callingMethod;
+        ptrs.connectedDevices = &connectedDevices;
 
         auto characteristicChannel =
             std::make_unique<flutter::EventChannel<EncodableValue>>(
@@ -344,18 +340,9 @@ namespace
                 result->Error(parseResult.second);
                 return;
             }
-            CharacteristicAddress charAddr = parseResult.first->characteristic();
-            auto task { SetNotifiableAsync(charAddr, GattClientCharacteristicConfigurationDescriptorValue::Notify) };
-            bool success = task.get();
-            if (success)
-            {
-                callingMethod = flutter::CallingMethod::notify;
-                result->Success();
-            }
-            else
-            {
-                result->Error("Unable to subscribe to characteristic.");
-            }
+            characteristicAddress = parseResult.first->characteristic();
+            callingMethod = flutter::CallingMethod::notify;
+            result->Success();  // Hand-over to characteristic handler
         }
         else if (methodName.compare("stopNotifications") == 0)
         {
@@ -719,117 +706,6 @@ namespace
                 return std::shared_ptr<GattCommunicationStatus>(nullptr);
             }
         });
-    }
-
-
-    /**
-     * @brief Set notification level (notify, indicate, or none) for the given characteristic (asynchronous).
-     * 
-     * @param charAddr The address of the characteristic to subscribe to.
-     * @return concurrency::task<bool> If the action was successful.
-     */
-    concurrency::task<bool> ReactiveBleWindowsPlugin::SetNotifiableAsync(CharacteristicAddress charAddr, GattClientCharacteristicConfigurationDescriptorValue descriptor)
-    {
-        return concurrency::create_task([this, charAddr, descriptor]
-        {
-            std::string deviceID = charAddr.deviceid();
-            uint64_t addr = std::stoull(deviceID);
-            auto iter = connectedDevices.find(addr);
-            if (iter == connectedDevices.end()) return false;
-
-            BluetoothDeviceAgent agent = *iter->second;
-            auto gattChar = agent.GetCharacteristicAsync(charAddr.serviceuuid().data(), charAddr.characteristicuuid().data()).get();
-            auto writeDescriptorStatus = gattChar.WriteClientCharacteristicConfigurationDescriptorAsync(descriptor).get();
-            if (writeDescriptorStatus != GattCommunicationStatus::Success) return false;
-
-            if (descriptor == GattClientCharacteristicConfigurationDescriptorValue::Notify)
-            {
-                agent.subscribedCharacteristicsAddresses[addr] = charAddr;
-                agent.valueChangedTokens[deviceID] = gattChar.ValueChanged({this, &ReactiveBleWindowsPlugin::GattCharacteristic_ValueChanged});
-            }
-            else
-            {
-                // Remove token to stop receiving notifications
-                gattChar.ValueChanged(std::exchange(agent.valueChangedTokens[deviceID], {}));
-                agent.subscribedCharacteristicsAddresses.erase(addr);
-            }
-
-            // Update connectedDevices map with changed agent
-            connectedDevices[addr] = std::make_unique<BluetoothDeviceAgent>(agent);
-            return true;
-        });
-    }
-
-
-    void ReactiveBleWindowsPlugin::GattCharacteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
-    {
-        if (characteristicSink == nullptr)
-        {
-            std::cerr << "Error: Characteristic sink not yet initialized by handler." << std::endl;
-            return;
-        }
-
-        std::string uuid = BleUtils::to_uuidstr(sender.Uuid());
-        IBuffer characteristicValue = args.CharacteristicValue();
-        auto reader = winrt::Windows::Storage::Streams::DataReader::FromBuffer(characteristicValue);
-        reader.UnicodeEncoding(winrt::Windows::Storage::Streams::UnicodeEncoding::Utf8);
-        winrt::hstring writeValue = reader.ReadString(characteristicValue.Length());
-        std::string strVal = to_string(writeValue);
-
-        GattDeviceService service = sender.Service();
-        uint64_t bluetoothAddr = service.Device().BluetoothAddress();
-        std::string addrString = to_string(winrt::to_hstring(bluetoothAddr));
-        std::string serviceUUID = BleUtils::to_uuidstr(service.Uuid());
-
-        // Retrieve old characteristic address
-        auto iter = connectedDevices.find(bluetoothAddr);
-        if (iter == connectedDevices.end())
-        {
-            characteristicSink->EventSink::Error("Not currently connected to device.");
-            return;
-        }
-        auto subscribedMap = (*iter->second).subscribedCharacteristicsAddresses;
-        auto subIter = subscribedMap.find(bluetoothAddr);
-        if (subIter == subscribedMap.end())
-        {
-            characteristicSink->EventSink::Error("Could not obtain address of characteristic for received notification.");
-            return;
-        }
-        CharacteristicAddress charAddr = subIter->second;
-
-        // Update characteristic address with changed values
-        charAddr.mutable_characteristicuuid()->set_data(uuid);
-        charAddr.mutable_serviceuuid()->set_data(serviceUUID);
-
-        CharacteristicValueInfo updatedCharacteristic;
-        updatedCharacteristic.mutable_characteristic()->CopyFrom(charAddr);
-        for (size_t i = 0; i < writeValue.size(); i++)
-        {
-            updatedCharacteristic.mutable_value()->push_back(strVal[i]);
-        }
-
-        size_t size = updatedCharacteristic.ByteSizeLong();
-        uint8_t *buffer = (uint8_t *)malloc(size);
-        bool success = updatedCharacteristic.SerializeToArray(buffer, size);
-        if (!success)
-        {
-            std::cout << "Failed to serialize message into buffer." << std::endl; // Debugging
-            free(buffer);
-            characteristicSink->EventSink::Error("Failed to serialize message into buffer.");  //TODO: Will this crash due to not having an error code?
-            return;
-        }
-
-        EncodableList result;
-        for (uint32_t i = 0; i < size; i++)
-        {
-            uint8_t value = buffer[i];
-            EncodableValue encodedVal = (EncodableValue)value;
-            result.push_back(encodedVal);
-        }
-        std::cout << "About to send success to sink" << std::endl;
-        characteristicSink->EventSink::Success(result);
-        std::cout << "success" << std::endl;
-        free(buffer);
     }
 
 } // namespace
