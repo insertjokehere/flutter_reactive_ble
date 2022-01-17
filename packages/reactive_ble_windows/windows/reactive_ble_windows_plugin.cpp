@@ -495,10 +495,10 @@ namespace
                 return result;
             }
             winrt::Windows::Foundation::Collections::IVectorView<GattDeviceService> services = servicesResult.Services();
-            DiscoveredService converted;
 
             for (size_t i = 0; i < services.Size(); i++)
             {
+                DiscoveredService converted;
                 GattDeviceService const service = services.GetAt(i);
                 converted.mutable_serviceuuid()->set_data(BleUtils::to_uuidstr(service.Uuid()));
 
