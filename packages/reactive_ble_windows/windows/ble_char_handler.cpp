@@ -126,63 +126,46 @@ namespace flutter
      */
     concurrency::task<bool> BleCharHandler::SetNotifiableAsync(CharacteristicAddress charAddr, bool shouldSubscribe)
     {
-        std::cout << "Set notifiable" << std::endl;
         return concurrency::create_task([this, charAddr, shouldSubscribe]
         {
             std::string deviceID = charAddr.deviceid();
-            std::cout << deviceID << std::endl;
             uint64_t addr = std::stoull(deviceID);
             auto iter = connectedDevices->find(addr);
             if (iter == connectedDevices->end()) return false;
-            std::cout << "Found connected device" << std::endl;
 
             BluetoothDeviceAgent agent = *iter->second;
-            std::cout << "Get characteristic async" << std::endl;
-            auto gattChar = agent.GetCharacteristicAsync(charAddr.serviceuuid().data(), charAddr.characteristicuuid().data()).get();
-            std::cout << "Got characteristic" << std::endl;
+            std::string serviceUuid = BleUtils::ProtobufUuidToString(charAddr.serviceuuid());
+            std::string charUuid = BleUtils::ProtobufUuidToString(charAddr.characteristicuuid());
+            auto gattChar = agent.GetCharacteristicAsync(serviceUuid, charUuid).get();
             GattClientCharacteristicConfigurationDescriptorValue descriptor = GattClientCharacteristicConfigurationDescriptorValue::None;
             if (shouldSubscribe)
             {
-                std::cout << "Subscribing" << std::endl;
                 if ((gattChar.CharacteristicProperties() & GattCharacteristicProperties::Indicate) != GattCharacteristicProperties::None)
                 {
-                    std::cout << "Indicate" << std::endl;
                     descriptor = GattClientCharacteristicConfigurationDescriptorValue::Indicate;
                 }
                 else if ((gattChar.CharacteristicProperties() & GattCharacteristicProperties::Notify) != GattCharacteristicProperties::None)
                 {
-                    std::cout << "Notify" << std::endl;
                     descriptor = GattClientCharacteristicConfigurationDescriptorValue::Notify;
                 }
             }
-            std::cout << "Write descriptor async" << std::endl;
             auto writeDescriptorStatus = gattChar.WriteClientCharacteristicConfigurationDescriptorAsync(descriptor).get();
-            std::cout << "Wrote descriptor" << std::endl;
             if (writeDescriptorStatus != GattCommunicationStatus::Success) return false;
-            std::cout << "Successful write" << std::endl;
 
             if (shouldSubscribe)
             {
-                std::cout << "Add subscription" << std::endl;
                 agent.subscribedCharacteristicsAddresses[addr] = charAddr;
-                std::cout << "Added address" << std::endl;
                 agent.valueChangedTokens[deviceID] = gattChar.ValueChanged({this, &BleCharHandler::GattCharacteristic_ValueChanged});
-                std::cout << "Added token" << std::endl;
             }
             else
             {
                 // Remove token to stop receiving notifications
-                std::cout << "Remove subscription" << std::endl;
                 gattChar.ValueChanged(std::exchange(agent.valueChangedTokens[deviceID], {}));
-                std::cout << "Removed token" << std::endl;
                 agent.subscribedCharacteristicsAddresses.erase(addr);
-                std::cout << "Removed address" << std::endl;
             }
 
             // Update connectedDevices map with changed agent
-            std::cout << "Update connected list" << std::endl;
             connectedDevices->insert_or_assign(addr, std::make_unique<BluetoothDeviceAgent>(agent));
-            std::cout << "Finished adding subscription" << std::endl;
             return true;
         });
     }
@@ -203,7 +186,6 @@ namespace flutter
         if (characteristic_sink_ == nullptr)
         {
             //TODO: Is there a way the sink can be handled to avoid this case? Currently very fragile
-            std::cout << "nullptr" << std::endl;
             std::cerr << "Error: Characteristic sink not yet initialized." << std::endl;
             return;
         }
