@@ -700,7 +700,10 @@ namespace
             {
                 return std::shared_ptr<GattCommunicationStatus>(nullptr);
             }
-            auto gattChar = (*iter->second).GetCharacteristicAsync(charAddr.serviceuuid().data(), charAddr.characteristicuuid().data()).get();
+
+            std::string serviceUuid = BleUtils::ProtobufUuidToString(charAddr.serviceuuid());
+            std::string charUuid = BleUtils::ProtobufUuidToString(charAddr.characteristicuuid());
+            auto gattChar = (*iter->second).GetCharacteristicAsync(serviceUuid, charUuid).get();
             DataWriter writer;
             writer.WriteString(winrt::to_hstring(value));
             IBuffer buf = writer.DetachBuffer();

@@ -10,9 +10,11 @@
 #include <winrt/Windows.Devices.Bluetooth.h>
 #include <winrt/Windows.Devices.Bluetooth.Advertisement.h>
 #include <winrt/Windows.Devices.Radios.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <ppltasks.h>
 
+#include "include/reactive_ble_windows/ble_utils.h"
 #include "../lib/src/generated/bledata.pb.h"
 #include "../../bluetooth_device_agent.cpp"
 

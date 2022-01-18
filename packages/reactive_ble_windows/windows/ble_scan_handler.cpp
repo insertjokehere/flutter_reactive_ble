@@ -1,9 +1,5 @@
 #include "include/reactive_ble_windows/ble_scan_handler.h"
 
-#include <windows.h>
-#include <winrt/Windows.Foundation.Collections.h>
-
-#include <sstream>
 
 namespace flutter
 {

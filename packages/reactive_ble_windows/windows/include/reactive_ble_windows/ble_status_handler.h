@@ -7,8 +7,9 @@
 #include <flutter/standard_method_codec.h>
 
 #include <windows.h>
-#include <winrt/windows.devices.bluetooth.h>
-#include <winrt/windows.devices.radios.h>
+#include <winrt/Windows.Devices.Bluetooth.h>
+#include <winrt/Windows.Devices.Radios.h>
+#include <winrt/Windows.Foundation.Collections.h>
 
 #include "../lib/src/generated/bledata.pb.h"
 

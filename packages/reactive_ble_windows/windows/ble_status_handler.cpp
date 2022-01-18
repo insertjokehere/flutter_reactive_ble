@@ -1,7 +1,5 @@
 #include "include/reactive_ble_windows/ble_status_handler.h"
 
-#include <windows.h>
-#include <winrt/Windows.Foundation.Collections.h>
 
 namespace flutter
 {
