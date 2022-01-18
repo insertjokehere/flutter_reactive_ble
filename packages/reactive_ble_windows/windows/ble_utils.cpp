@@ -1,16 +1,3 @@
-// This must be included before many other Windows headers.
-#include <windows.h>
-#include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.Storage.Streams.h>
-#include <winrt/Windows.Devices.Bluetooth.h>
-#include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
-
-#include <map>
-#include <algorithm>
-#include <iostream>
-#include <sstream>
-
 #include "include/reactive_ble_windows/ble_utils.h"
 
 
@@ -65,3 +52,30 @@ std::vector<uint8_t> BleUtils::GuidToByteVec(winrt::guid guid)
     return result;
 }
 
+
+/**
+ * @brief Converts a Uuid (defined by bledata.proto) into a formatted string.
+ * 
+ * @param uuid The Uuid to convert into a string.
+ * @return std::string The string equivalent of the given Uuid, with hyphens.
+ */
+std::string BleUtils::ProtobufUuidToString(Uuid uuid)
+{
+    unsigned char* x = (unsigned char*) uuid.data().c_str();
+    std::stringstream ss;
+    ss << std::hex;
+    for (size_t i = 0; i < uuid.data().length(); i++)
+    {
+        ss << std::setw(2) << std::setfill('0') << (int)x[i];
+    }
+    std::string result = ss.str();
+
+    // UUID format: 01234567-8901-2345-6789-012345678901
+    //                       ^    ^    ^    ^
+    // Index:                8    12   16   20
+    result.insert(20, "-");
+    result.insert(16, "-");
+    result.insert(12, "-");
+    result.insert(8, "-");
+    return result;
+}

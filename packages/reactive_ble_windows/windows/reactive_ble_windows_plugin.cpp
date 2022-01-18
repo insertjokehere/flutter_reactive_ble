@@ -325,8 +325,8 @@ namespace
             EncodableList encoded;
             for (uint32_t i = 0; i < size; i++)
             {
-                uint8_t value = buffer[i];
-                EncodableValue encodedVal = (EncodableValue)value;
+                uint8_t val = buffer[i];
+                EncodableValue encodedVal = (EncodableValue)val;
                 encoded.push_back(encodedVal);
             }
             free(buffer);
@@ -660,18 +660,21 @@ namespace
      */
     concurrency::task<std::shared_ptr<GattReadResult>> ReactiveBleWindowsPlugin::ReadCharacteristicAsync(CharacteristicAddress &charAddr)
     {
-       return concurrency::create_task([this, charAddr]
-       {
-           uint64_t deviceAddr = std::stoull(charAddr.deviceid());
-           auto iter = connectedDevices.find(deviceAddr);
-           if (iter == connectedDevices.end())
-           {
-               return std::shared_ptr<GattReadResult>(nullptr);
-           }
-           auto gattChar = (*iter->second).GetCharacteristicAsync(charAddr.serviceuuid().data(), charAddr.characteristicuuid().data()).get();
-           auto readResult = gattChar.ReadValueAsync().get();
-           return std::make_shared<GattReadResult>(readResult);
-       });
+        return concurrency::create_task([this, charAddr]
+        {
+            uint64_t deviceAddr = std::stoull(charAddr.deviceid());
+            auto iter = connectedDevices.find(deviceAddr);
+            if (iter == connectedDevices.end())
+            {
+                return std::shared_ptr<GattReadResult>(nullptr);
+            }
+
+            std::string serviceUuid = BleUtils::ProtobufUuidToString(charAddr.serviceuuid());
+            std::string charUuid = BleUtils::ProtobufUuidToString(charAddr.characteristicuuid());
+            auto gattChar = (*iter->second).GetCharacteristicAsync(serviceUuid, charUuid).get();
+            auto readResult = gattChar.ReadValueAsync().get();
+            return std::make_shared<GattReadResult>(readResult);
+        });
     }
 
 
