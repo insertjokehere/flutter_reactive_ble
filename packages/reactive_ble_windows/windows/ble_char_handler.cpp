@@ -35,13 +35,26 @@ namespace flutter
             SendCharacteristicInfo();
             *callingMethod = CallingMethod::none;
         }
-        else if (*callingMethod == CallingMethod::notify)
+        else if (*callingMethod == CallingMethod::subscribe || *callingMethod == CallingMethod::unsubscribe)
         {
-            auto task { SetNotifiableAsync(*characteristicAddress, GattClientCharacteristicConfigurationDescriptorValue::Notify) };
+            bool shouldSubscribe;
+            std::string errorMessage;
+            if (*callingMethod == CallingMethod::subscribe)
+            {
+                shouldSubscribe = true;
+                errorMessage = "Failed to subscribe to characteristic.";
+            }
+            else
+            {
+                shouldSubscribe = false;
+                errorMessage = "Failed to unsubscribe from characteristic.";
+            }
+            auto task { SetNotifiableAsync(*characteristicAddress, shouldSubscribe) };
             bool success = task.get();
             if (!success)
             {
-                characteristic_sink_->EventSink::Error("Failed to subscribe to characteristic.");
+                std::cout << errorMessage << std::endl;
+                characteristic_sink_->EventSink::Error(errorMessage);
             }
             *callingMethod = CallingMethod::none;
         }
@@ -113,12 +126,12 @@ namespace flutter
      * @brief Set notification level (notify, indicate, or none) for the given characteristic (asynchronous).
      * 
      * @param charAddr The address of the characteristic to subscribe to.
+     * @param shouldSubscribe If the notification should be a subscription or the cancellation of a subscription.
      * @return concurrency::task<bool> If the action was successful.
      */
-    concurrency::task<bool> BleCharHandler::SetNotifiableAsync(CharacteristicAddress charAddr, GattClientCharacteristicConfigurationDescriptorValue descriptor)
+    concurrency::task<bool> BleCharHandler::SetNotifiableAsync(CharacteristicAddress charAddr, bool shouldSubscribe)
     {
-        std::cout << "Set notifiable" << std::endl;
-        return concurrency::create_task([this, charAddr, descriptor]
+        return concurrency::create_task([this, charAddr, shouldSubscribe]
         {
             std::string deviceID = charAddr.deviceid();
             uint64_t addr = std::stoull(deviceID);
@@ -127,10 +140,22 @@ namespace flutter
 
             BluetoothDeviceAgent agent = *iter->second;
             auto gattChar = agent.GetCharacteristicAsync(charAddr.serviceuuid().data(), charAddr.characteristicuuid().data()).get();
+            GattClientCharacteristicConfigurationDescriptorValue descriptor = GattClientCharacteristicConfigurationDescriptorValue::None;
+            if (shouldSubscribe)
+            {
+                if ((gattChar.CharacteristicProperties() & GattCharacteristicProperties::Indicate) != GattCharacteristicProperties::None)
+                {
+                    descriptor = GattClientCharacteristicConfigurationDescriptorValue::Indicate;
+                }
+                else if ((gattChar.CharacteristicProperties() & GattCharacteristicProperties::Notify) != GattCharacteristicProperties::None)
+                {
+                    descriptor = GattClientCharacteristicConfigurationDescriptorValue::Notify;
+                }
+            }
             auto writeDescriptorStatus = gattChar.WriteClientCharacteristicConfigurationDescriptorAsync(descriptor).get();
             if (writeDescriptorStatus != GattCommunicationStatus::Success) return false;
 
-            if (descriptor == GattClientCharacteristicConfigurationDescriptorValue::Notify)
+            if (shouldSubscribe)
             {
                 agent.subscribedCharacteristicsAddresses[addr] = charAddr;
                 agent.valueChangedTokens[deviceID] = gattChar.ValueChanged({this, &BleCharHandler::GattCharacteristic_ValueChanged});
@@ -149,6 +174,15 @@ namespace flutter
     }
 
 
+    /**
+     * @brief Callback method for when a subscribed characteristic has changed.
+     * 
+     * Relies on the characteristic_sink_ being set in the OnListen method.
+     * If it is null, the method returns early as it cannot proceed.
+     * 
+     * @param sender The notifying characteristic.
+     * @param args The arguments of the changed characteristic.
+     */
     void BleCharHandler::GattCharacteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
     {
         if (characteristic_sink_ == nullptr)
@@ -158,7 +192,7 @@ namespace flutter
             return;
         }
 
-        std::string uuid = BleUtils::to_uuidstr(sender.Uuid());
+        std::string uuid = BleUtils::GuidToString(sender.Uuid());
         IBuffer characteristicValue = args.CharacteristicValue();
         auto reader = winrt::Windows::Storage::Streams::DataReader::FromBuffer(characteristicValue);
         reader.UnicodeEncoding(winrt::Windows::Storage::Streams::UnicodeEncoding::Utf8);
@@ -168,7 +202,7 @@ namespace flutter
         GattDeviceService service = sender.Service();
         uint64_t bluetoothAddr = service.Device().BluetoothAddress();
         std::string addrString = to_string(winrt::to_hstring(bluetoothAddr));
-        std::string serviceUUID = BleUtils::to_uuidstr(service.Uuid());
+        std::string serviceUUID = BleUtils::GuidToString(service.Uuid());
 
         // Retrieve old characteristic address
         auto iter = connectedDevices->find(bluetoothAddr);

@@ -10,7 +10,8 @@
 #include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
 
 namespace BleUtils {
-    std::string to_uuidstr(winrt::guid);
+    std::string GuidToString(winrt::guid);
+    std::vector<uint8_t> GuidToByteVec(winrt::guid guid);
 }
 
 #endif

@@ -27,7 +27,7 @@ namespace
 
             for (auto s : serviceResult.Services())
             {
-                if (BleUtils::to_uuidstr(s.Uuid()) == service) gattServices.insert(std::make_pair(service, s));
+                if (BleUtils::GuidToString(s.Uuid()) == service) gattServices.insert(std::make_pair(service, s));
             }
         }
         co_return gattServices.at(service);
@@ -52,7 +52,7 @@ namespace
 
             for (auto c : characteristicResult.Characteristics())
             {
-                if (BleUtils::to_uuidstr(c.Uuid()) == characteristic) gattCharacteristics.insert(std::make_pair(characteristic, c));
+                if (BleUtils::GuidToString(c.Uuid()) == characteristic) gattCharacteristics.insert(std::make_pair(characteristic, c));
             }
         }
         co_return gattCharacteristics.at(characteristic);

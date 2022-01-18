@@ -22,6 +22,7 @@
 #include <map>
 #include <memory>
 #include <sstream>
+#include <iomanip>
 #include <variant>
 
 #include "../lib/src/generated/bledata.pb.h"
@@ -331,7 +332,7 @@ namespace
             free(buffer);
             result->Success(encoded);
         }
-        else if (methodName.compare("readNotifications") == 0)
+        else if (methodName.compare("readNotifications") == 0 || methodName.compare("stopNotifications") == 0)
         {
             std::pair<std::unique_ptr<NotifyCharacteristicRequest>, std::string> parseResult =
                 ParseArgsToRequest<NotifyCharacteristicRequest>(method_call.arguments());
@@ -341,13 +342,8 @@ namespace
                 return;
             }
             characteristicAddress = parseResult.first->characteristic();
-            callingMethod = flutter::CallingMethod::notify;
+            callingMethod = (methodName.compare("readNotifications") == 0) ? flutter::CallingMethod::subscribe : flutter::CallingMethod::unsubscribe;
             result->Success();  // Hand-over to characteristic handler
-        }
-        else if (methodName.compare("stopNotifications") == 0)
-        {
-            callingMethod = flutter::CallingMethod::unsubscribe;
-            result->NotImplemented();
         }
         else if (methodName.compare("negotiateMtuSize") == 0)  // Async data
         {
@@ -500,14 +496,18 @@ namespace
             {
                 DiscoveredService converted;
                 GattDeviceService const service = services.GetAt(i);
-                converted.mutable_serviceuuid()->set_data(BleUtils::to_uuidstr(service.Uuid()));
+                std::vector<uint8_t> serviceUuidBytes = BleUtils::GuidToByteVec(service.Uuid());
+                for (auto p = serviceUuidBytes.begin(); p != serviceUuidBytes.end(); p++)
+                    converted.mutable_serviceuuid()->mutable_data()->push_back(*p);
 
                 winrt::Windows::Foundation::Collections::IVectorView includedServices = service.GetIncludedServicesAsync().get().Services();
                 converted.add_includedservices();
                 for (size_t j = 0; j < includedServices.Size(); j++)            
                 {
                     DiscoveredService tmp;
-                    tmp.mutable_serviceuuid()->set_data(BleUtils::to_uuidstr(includedServices.GetAt(j).Uuid()));
+                    std::vector<uint8_t> includedUuidBytes = BleUtils::GuidToByteVec(includedServices.GetAt(j).Uuid());
+                    for (auto q = includedUuidBytes.begin(); q != includedUuidBytes.end(); q++)
+                        tmp.mutable_serviceuuid()->mutable_data()->push_back(*q);
                     converted.add_includedservices()->CopyFrom(tmp);
                 }
 
@@ -518,8 +518,12 @@ namespace
                     GattCharacteristicProperties props = tmp_char.CharacteristicProperties();
                     DiscoveredCharacteristic tmp;
 
-                    tmp.mutable_characteristicid()->set_data(BleUtils::to_uuidstr(tmp_char.Uuid()));
-                    tmp.mutable_serviceid()->set_data(BleUtils::to_uuidstr(service.Uuid()));
+                    std::vector<uint8_t> charUuidBytes = BleUtils::GuidToByteVec(tmp_char.Uuid());
+                    for (auto r = charUuidBytes.begin(); r != charUuidBytes.end(); r++)
+                        tmp.mutable_characteristicid()->mutable_data()->push_back(*r);
+
+                    for (auto s = serviceUuidBytes.begin(); s != serviceUuidBytes.end(); s++)
+                        tmp.mutable_serviceid()->mutable_data()->push_back(*s);
 
                     tmp.set_isreadable((props & GattCharacteristicProperties::Read) != GattCharacteristicProperties::None);
                     tmp.set_iswritablewithresponse((props & GattCharacteristicProperties::Write) != GattCharacteristicProperties::None);

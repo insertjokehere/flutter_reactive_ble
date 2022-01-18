@@ -27,7 +27,7 @@ namespace flutter
     enum CallingMethod
     {
         read,
-        notify,
+        subscribe,
         unsubscribe,
         none
     };
@@ -75,7 +75,7 @@ namespace flutter
 
         void SendCharacteristicInfo();
 
-        concurrency::task<bool> SetNotifiableAsync(CharacteristicAddress charAddr, GattClientCharacteristicConfigurationDescriptorValue descriptor);
+        concurrency::task<bool> SetNotifiableAsync(CharacteristicAddress charAddr, bool shouldSubscribe);
 
         void GattCharacteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args);
 
