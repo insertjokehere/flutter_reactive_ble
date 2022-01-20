@@ -85,7 +85,7 @@ namespace
 
         void BluetoothLEDevice_ConnectionStatusChanged(BluetoothLEDevice sender, IInspectable args);
 
-        void CleanConnection(uint64_t bluetoothAddress);
+        concurrency::task<void> CleanConnection(uint64_t bluetoothAddress);
 
         void ReactiveBleWindowsPlugin::SendConnectionUpdate(std::string address, DeviceConnectionState state);
 
@@ -236,7 +236,7 @@ namespace
                 return;
             }
             uint64_t addr = std::stoull(parseResult.first->deviceid());
-            CleanConnection(addr);
+            CleanConnection(addr).get();
             result->Success();
         }
         else if (methodName.compare("readCharacteristic") == 0)
@@ -553,7 +553,7 @@ namespace
         OutputDebugString((L"ConnectionStatusChanged " + winrt::to_hstring((int32_t)sender.ConnectionStatus()) + L"\n").c_str());
         if (sender.ConnectionStatus() == BluetoothConnectionStatus::Disconnected)
         {
-            CleanConnection(sender.BluetoothAddress());
+            CleanConnection(sender.BluetoothAddress()).get();
             SendConnectionUpdate(std::to_string(sender.BluetoothAddress()), DeviceConnectionState::disconnected);
         }
     }
@@ -562,20 +562,30 @@ namespace
     /**
      * @brief Cleans up/disconnects from a BLE device with given address.
      * 
+     * Attempts to indicate to the device to stop sending notifications/indications, but if communication
+     * fails the method will ignore the failure and continue.
+     * 
      * @param bluetoothAddress The BLE device's address.
      */
-    void ReactiveBleWindowsPlugin::CleanConnection(uint64_t bluetoothAddress)
+    concurrency::task<void> ReactiveBleWindowsPlugin::CleanConnection(uint64_t bluetoothAddress)
     {
-        auto node = connectedDevices.extract(bluetoothAddress);
-        if (!node.empty())
+        return concurrency::create_task([this, bluetoothAddress]
         {
-            auto deviceAgent = std::move(node.mapped());
-            deviceAgent->device.ConnectionStatusChanged(deviceAgent->connnectionStatusChangedToken);
-            for (auto &tokenPair : deviceAgent->valueChangedTokens)
+            auto node = connectedDevices.extract(bluetoothAddress);
+            if (!node.empty())
             {
-                deviceAgent->gattCharacteristics.at(tokenPair.first).ValueChanged(tokenPair.second);
+                std::shared_ptr<BluetoothDeviceAgent> agent = std::move(node.mapped());
+                agent->device.ConnectionStatusChanged(agent->connnectionStatusChangedToken);
+                for (auto &tokenPair : agent->subscribedCharacteristicsAndTokens)
+                {
+                    std::pair<GattCharacteristic, winrt::event_token> charAndToken = tokenPair.second;
+                    // Unregister the handler and tell the device to stop sending
+                    charAndToken.first.ValueChanged(charAndToken.second);
+                    charAndToken.first.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::None).get();
+                }
+                agent->device.Close();
             }
-        }
+        });
     }
 
 

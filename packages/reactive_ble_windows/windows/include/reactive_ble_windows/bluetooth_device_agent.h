@@ -31,10 +31,13 @@ namespace
     public:
         winrt::Windows::Devices::Bluetooth::BluetoothLEDevice device;
         winrt::event_token connnectionStatusChangedToken;
-        std::map<std::string, winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattDeviceService> gattServices;
-        std::map<std::string, winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic> gattCharacteristics;
-        std::map<std::string, winrt::event_token> valueChangedTokens;
-        std::map<uint64_t, CharacteristicAddress> subscribedCharacteristicsAddresses;
+        std::map<std::string, winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattDeviceService> gattServices;  // Service UUID : GattDeviceService
+        std::map<std::string, winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic> gattCharacteristics;  // Characteristic UUID : GattCharacteristic
+
+        // (Service UUID, Characteristic UUID) : (GattCharacteristic, Event Token)
+        // Key is the combination of service and characteristic UUIDs as characteristic UUID on its own is not necessarily unique globally
+        std::map<std::pair<std::string, std::string>,
+                 std::pair<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic, winrt::event_token>> subscribedCharacteristicsAndTokens;
 
         BluetoothDeviceAgent(winrt::Windows::Devices::Bluetooth::BluetoothLEDevice device, winrt::event_token connnectionStatusChangedToken)
             : device(device),

@@ -117,6 +117,7 @@ namespace flutter
         EncodeAndSend(info);
     }
 
+
     /**
      * @brief Set notification level (notify, indicate, or none) for the given characteristic (asynchronous).
      * 
@@ -152,16 +153,19 @@ namespace flutter
             auto writeDescriptorStatus = gattChar.WriteClientCharacteristicConfigurationDescriptorAsync(descriptor).get();
             if (writeDescriptorStatus != GattCommunicationStatus::Success) return false;
 
+            std::pair<std::string, std::string> keyPair = std::make_pair(serviceUuid, charUuid);
             if (shouldSubscribe)
             {
-                agent.subscribedCharacteristicsAddresses[addr] = charAddr;
-                agent.valueChangedTokens[deviceID] = gattChar.ValueChanged({this, &BleCharHandler::GattCharacteristic_ValueChanged});
+                winrt::event_token token = gattChar.ValueChanged({this, &BleCharHandler::GattCharacteristic_ValueChanged});
+                std::pair<GattCharacteristic, winrt::event_token> valuePair = std::make_pair(gattChar, token);
+                agent.subscribedCharacteristicsAndTokens.insert(std::make_pair(keyPair, valuePair));
             }
             else
             {
-                // Remove token to stop receiving notifications
-                gattChar.ValueChanged(std::exchange(agent.valueChangedTokens[deviceID], {}));
-                agent.subscribedCharacteristicsAddresses.erase(addr);
+                std::pair<GattCharacteristic, winrt::event_token> valuePair = agent.subscribedCharacteristicsAndTokens.at(keyPair);
+                // Unregister handler
+                valuePair.first.ValueChanged(valuePair.second);
+                agent.subscribedCharacteristicsAndTokens.erase(keyPair);
             }
 
             // Update connectedDevices map with changed agent
@@ -190,7 +194,6 @@ namespace flutter
             return;
         }
 
-        std::string uuid = BleUtils::GuidToString(sender.Uuid());
         IBuffer characteristicValue = args.CharacteristicValue();
         auto reader = winrt::Windows::Storage::Streams::DataReader::FromBuffer(characteristicValue);
         reader.UnicodeEncoding(winrt::Windows::Storage::Streams::UnicodeEncoding::Utf8);
@@ -200,34 +203,22 @@ namespace flutter
         GattDeviceService service = sender.Service();
         uint64_t bluetoothAddr = service.Device().BluetoothAddress();
         std::string addrString = to_string(winrt::to_hstring(bluetoothAddr));
-        std::string serviceUUID = BleUtils::GuidToString(service.Uuid());
 
-        // Retrieve old characteristic address
-        auto iter = connectedDevices->find(bluetoothAddr);
-        if (iter == connectedDevices->end())
-        {
-            characteristic_sink_->EventSink::Error("Not currently connected to device.");
-            return;
-        }
-        auto subscribedMap = (*iter->second).subscribedCharacteristicsAddresses;
-        auto subIter = subscribedMap.find(bluetoothAddr);
-        if (subIter == subscribedMap.end())
-        {
-            characteristic_sink_->EventSink::Error("Could not obtain address of characteristic for received notification.");
-            return;
-        }
-        CharacteristicAddress charAddr = subIter->second;
+        CharacteristicAddress charAddr;
+        charAddr.mutable_deviceid()->assign(addrString);
 
-        // Update characteristic address with changed values
-        charAddr.mutable_characteristicuuid()->set_data(uuid);
-        charAddr.mutable_serviceuuid()->set_data(serviceUUID);
+        std::vector<uint8_t> charUuidBytes = BleUtils::GuidToByteVec(sender.Uuid());
+        for (auto i = charUuidBytes.begin(); i != charUuidBytes.end(); i++)
+            charAddr.mutable_characteristicuuid()->mutable_data()->push_back(*i);
+
+        std::vector<uint8_t> serviceUuidBytes = BleUtils::GuidToByteVec(service.Uuid());
+        for (auto j = serviceUuidBytes.begin(); j != serviceUuidBytes.end(); j++)
+            charAddr.mutable_serviceuuid()->mutable_data()->push_back(*j);
 
         CharacteristicValueInfo updatedCharacteristic;
         updatedCharacteristic.mutable_characteristic()->CopyFrom(charAddr);
-        for (size_t i = 0; i < writeValue.size(); i++)
-        {
+        for (size_t i = 0; i < strVal.length(); i++)
             updatedCharacteristic.mutable_value()->push_back(strVal[i]);
-        }
 
         EncodeAndSend(updatedCharacteristic);
         std::cout << "Sent update notification to Flutter" << std::endl;
