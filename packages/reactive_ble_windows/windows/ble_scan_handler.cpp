@@ -8,6 +8,7 @@ namespace flutter
     using namespace winrt::Windows::Devices::Radios;
     using namespace winrt::Windows::Devices::Bluetooth;
     using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
+    using namespace winrt::Windows::Devices::Bluetooth::GenericAttributeProfile;
     using namespace winrt::Windows::Storage::Streams;
 
 
@@ -93,6 +94,52 @@ namespace flutter
     }
 
 
+    concurrency::task<std::string> GetNameAsync(uint64_t addr)
+    {
+        return concurrency::create_task([addr]
+        {
+            std::string name = "";
+            BluetoothLEDevice device = BluetoothLEDevice::FromBluetoothAddressAsync(addr).get();
+            if (device == nullptr)
+                return name;
+            auto serviceResult = device.GetGattServicesAsync().get();
+
+            bool readNameChar = false;
+            for (const GattDeviceService _tmp : serviceResult.Services())
+            {
+                // 0x1800 is the GAP service
+                if (_tmp.Uuid().Data1 == 6144)
+                {
+                    auto charResult = _tmp.GetCharacteristicsAsync().get();
+                    for (const GattCharacteristic _tmp2 : charResult.Characteristics())
+                    {
+                        // 0x2A00 is the device name characteristic
+                        if (_tmp2.Uuid().Data1 == 10752)
+                        {
+                            auto value = _tmp2.ReadValueAsync().get();
+                            IBuffer val = value.Value();
+
+                            auto reader = DataReader::FromBuffer(val);
+                            auto result = std::vector<uint8_t>(reader.UnconsumedBufferLength());
+                            reader.ReadBytes(result);
+                            name = std::string(result.begin(), result.end());
+                            // There is the potential for the name to still be empty, so break on
+                            // the knowledge that the name characteristic has been read
+                            readNameChar = true;
+                            break;
+                        } 
+                    }
+                }
+
+                if (readNameChar)
+                    break;
+            }
+            device.Close();
+            return name;
+        });
+    }
+
+
     /**
      * @brief Callback for when a BLE advertisement has been received.
      * 
@@ -112,9 +159,12 @@ namespace flutter
             sstream << std::hex << args.BluetoothAddress();
             std::string localName = winrt::to_string(args.Advertisement().LocalName());
 
+            if (localName.empty())
+                localName = GetNameAsync(args.BluetoothAddress()).get();
+
             DeviceScanInfo info;
             info.set_id(std::to_string(args.BluetoothAddress()));
-            // If the local name is empty, use a hex representation of the device address
+            // If the local name is still empty, use a hex representation of the device address
             info.set_name((localName.empty()) ? sstream.str() : localName);
             info.set_manufacturerdata(str);
             info.add_serviceuuids();
