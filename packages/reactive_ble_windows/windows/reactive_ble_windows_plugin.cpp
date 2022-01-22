@@ -711,12 +711,27 @@ namespace
                 return std::shared_ptr<GattCommunicationStatus>(nullptr);
             }
 
+            // Print the bytes received from Dart.
+            std::cout << "Value received from Dart: ";
+            for(int i = 0; i < value.length(); i++) {
+                printf("%02X", value.c_str()[i]);
+            }
+            std::cout << std::endl;
+
             std::string serviceUuid = BleUtils::ProtobufUuidToString(charAddr.serviceuuid());
             std::string charUuid = BleUtils::ProtobufUuidToString(charAddr.characteristicuuid());
             auto gattChar = (*iter->second).GetCharacteristicAsync(serviceUuid, charUuid).get();
             DataWriter writer;
+            
+            // Comment out line 728, and uncomment lines 730 and 731 to
+            // ignore the input from dart and send a link packet instead.
             writer.WriteString(winrt::to_hstring(value));
+            
+            // uint8_t array_uint[] = {0x23, 0x6C, 0x01, 0x05, 0x95};
+            // writer.WriteBytes(array_uint);
+            
             IBuffer buf = writer.DetachBuffer();
+           
             try {
                 GattCommunicationStatus writeStatus =
                     gattChar.WriteValueAsync(buf, (withResponse) ? GattWriteOption::WriteWithResponse : GattWriteOption::WriteWithoutResponse).get();

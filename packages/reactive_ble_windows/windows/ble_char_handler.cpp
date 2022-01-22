@@ -195,6 +195,14 @@ namespace flutter
         }
 
         IBuffer characteristicValue = args.CharacteristicValue();
+
+        // Print the data we receive from our BLE device.
+        auto data = characteristicValue.data();
+        for(int i = 0; i < characteristicValue.Length(); i++) {
+            printf("%02X", data[i]);
+        }
+        std::cout << std::endl;
+        
         auto reader = winrt::Windows::Storage::Streams::DataReader::FromBuffer(characteristicValue);
         reader.UnicodeEncoding(winrt::Windows::Storage::Streams::UnicodeEncoding::Utf8);
         winrt::hstring writeValue = reader.ReadString(characteristicValue.Length());
