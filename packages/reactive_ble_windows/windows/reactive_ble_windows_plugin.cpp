@@ -94,7 +94,7 @@ namespace
 
         concurrency::task<std::shared_ptr<GattReadResult>> ReadCharacteristicAsync(CharacteristicAddress &charAddr);
 
-        concurrency::task<std::shared_ptr<GattCommunicationStatus>> WriteCharacteristicAsync(CharacteristicAddress &charAddr, std::string value, bool withResponse);
+        concurrency::task<std::shared_ptr<GattCommunicationStatus>> WriteCharacteristicAsync(CharacteristicAddress &charAddr, std::vector<uint8_t> value, bool withResponse);
 
         std::unique_ptr<flutter::EventSink<EncodableValue>> connected_device_sink_;
         std::map<uint64_t, std::shared_ptr<BluetoothDeviceAgent>> connectedDevices{};
@@ -298,8 +298,9 @@ namespace
             }
             CharacteristicAddress charAddr = parseResult.first->characteristic();
             std::string value = parseResult.first->value();
+            std::vector<uint8_t> bytes(value.begin(), value.end());
 
-            auto task { WriteCharacteristicAsync(charAddr, value, withResponse) };
+            auto task { WriteCharacteristicAsync(charAddr, bytes, withResponse) };
             std::shared_ptr<GattCommunicationStatus> writeStatus = task.get();
 
             if (writeStatus == nullptr || *writeStatus != GattCommunicationStatus::Success)
@@ -700,7 +701,7 @@ namespace
      * @return concurrency::task<std::shared_ptr<GattCommunicationStatus>> Shared pointer to the returned GATT communication status, may be nullptr.
      */
     concurrency::task<std::shared_ptr<GattCommunicationStatus>> ReactiveBleWindowsPlugin::WriteCharacteristicAsync(
-        CharacteristicAddress &charAddr, std::string value, bool withResponse)
+        CharacteristicAddress &charAddr, std::vector<uint8_t> value, bool withResponse)
     {
         return concurrency::create_task([this, charAddr, value, withResponse]
         {
@@ -711,27 +712,13 @@ namespace
                 return std::shared_ptr<GattCommunicationStatus>(nullptr);
             }
 
-            // Print the bytes received from Dart.
-            std::cout << "Value received from Dart: ";
-            for(int i = 0; i < value.length(); i++) {
-                printf("%02X", value.c_str()[i]);
-            }
-            std::cout << std::endl;
-
             std::string serviceUuid = BleUtils::ProtobufUuidToString(charAddr.serviceuuid());
             std::string charUuid = BleUtils::ProtobufUuidToString(charAddr.characteristicuuid());
             auto gattChar = (*iter->second).GetCharacteristicAsync(serviceUuid, charUuid).get();
             DataWriter writer;
-            
-            // Comment out line 728, and uncomment lines 730 and 731 to
-            // ignore the input from dart and send a link packet instead.
-            writer.WriteString(winrt::to_hstring(value));
-            
-            // uint8_t array_uint[] = {0x23, 0x6C, 0x01, 0x05, 0x95};
-            // writer.WriteBytes(array_uint);
-            
+            writer.WriteBytes(value);
             IBuffer buf = writer.DetachBuffer();
-           
+
             try {
                 GattCommunicationStatus writeStatus =
                     gattChar.WriteValueAsync(buf, (withResponse) ? GattWriteOption::WriteWithResponse : GattWriteOption::WriteWithoutResponse).get();
