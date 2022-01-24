@@ -186,7 +186,6 @@ namespace flutter
      */
     void BleCharHandler::GattCharacteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
     {
-        std::cout << "Received value changed" << std::endl;
         if (characteristic_sink_ == nullptr)
         {
             //TODO: Is there a way the sink can be handled to avoid this case? Currently very fragile
@@ -195,11 +194,8 @@ namespace flutter
         }
 
         IBuffer characteristicValue = args.CharacteristicValue();
-
         auto reader = winrt::Windows::Storage::Streams::DataReader::FromBuffer(characteristicValue);
         reader.UnicodeEncoding(winrt::Windows::Storage::Streams::UnicodeEncoding::Utf8);
-        winrt::hstring writeValue = reader.ReadString(characteristicValue.Length());
-        std::string strVal = to_string(writeValue);
 
         GattDeviceService service = sender.Service();
         uint64_t bluetoothAddr = service.Device().BluetoothAddress();
@@ -218,11 +214,10 @@ namespace flutter
 
         CharacteristicValueInfo updatedCharacteristic;
         updatedCharacteristic.mutable_characteristic()->CopyFrom(charAddr);
-        for (size_t i = 0; i < strVal.length(); i++)
-            updatedCharacteristic.mutable_value()->push_back(strVal[i]);
+        for (size_t i = 0; i < characteristicValue.Length(); i++)
+            updatedCharacteristic.mutable_value()->push_back(reader.ReadByte());
 
         EncodeAndSend(updatedCharacteristic);
-        std::cout << "Sent update notification to Flutter" << std::endl;
     }
 
 } // namespace flutter
