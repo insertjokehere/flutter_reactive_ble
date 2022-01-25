@@ -1,6 +1,5 @@
 #include "include/reactive_ble_windows/ble_scan_handler.h"
-
-
+#include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
 namespace flutter
 {
     using namespace winrt::Windows::Foundation;
@@ -105,18 +104,58 @@ namespace flutter
     {
         if (scan_result_sink_)
         {
+            if(static_cast<int>(args.AdvertisementType()) > 1) {
+                return;
+            }
+            std::string btAddress = std::to_string(args.BluetoothAddress());
+            if(this->knownDevices.count(btAddress) > 0) {
+                return;
+            }
+            this->knownDevices.insert(btAddress);
+
             auto manufacturer_data = parseManufacturerData(args.Advertisement());
-            std::string str(manufacturer_data.begin(), manufacturer_data.end());
 
             std::stringstream sstream;
             sstream << std::hex << args.BluetoothAddress();
             std::string localName = winrt::to_string(args.Advertisement().LocalName());
 
             DeviceScanInfo info;
+
             info.set_id(std::to_string(args.BluetoothAddress()));
             // If the local name is empty, use a hex representation of the device address
+
+            if(localName.empty()) {
+                std::cout << "Getting name... " << std::endl;
+                BluetoothLEDevice device = BluetoothLEDevice::FromBluetoothAddressAsync(args.BluetoothAddress()).get();
+                auto services = device.GetGattServicesAsync().get();
+                for (GenericAttributeProfile::GattDeviceService _tmp : services.Services()) {
+                    if(_tmp.Uuid() == GenericAttributeProfile::GattServiceUuids::GenericAccess()) {
+                        std::cout << "Got DInformation" << std::endl;
+                        auto chars = _tmp.GetCharacteristicsAsync().get();
+                        for (GenericAttributeProfile::GattCharacteristic _tmp2 : chars.Characteristics()) {
+                            //if(_tmp2.Uuid() == GenericAttributeProfile::GattCharacteristicUuids::GapDeviceName()) {
+                            if(_tmp2.Uuid().Data1 == 10752) {
+                                std::cout << "Got Dname" << std::endl;
+                                auto reader = DataReader::FromBuffer(_tmp2.ReadValueAsync().get().Value());
+                                localName = winrt::to_string(reader.ReadString(reader.UnconsumedBufferLength()));
+
+                                auto value = _tmp2.ReadValueAsync().get();
+                        IBuffer val = value.Value();
+
+                        auto reader2 = DataReader::FromBuffer(val);
+                        auto result = std::vector<uint8_t>(reader2.UnconsumedBufferLength());
+                        reader2.ReadBytes(result);
+                        std::string txt (result.begin(), result.end());
+                        std::cout << txt << std::endl;
+                            }
+                        }
+                        break;
+                    }
+                }
+    	        std::cout << "Got name! " << std::endl;
+            }
             info.set_name((localName.empty()) ? sstream.str() : localName);
-            info.set_manufacturerdata(str);
+            info.set_manufacturerdata(std::string(manufacturer_data.begin(), manufacturer_data.end()));
             info.add_serviceuuids();
             info.add_servicedata();
             info.set_rssi(args.RawSignalStrengthInDBm());

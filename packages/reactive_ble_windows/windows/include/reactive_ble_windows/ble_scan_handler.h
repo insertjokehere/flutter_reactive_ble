@@ -50,6 +50,8 @@ namespace flutter
         winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher bleWatcher = nullptr;
         winrt::event_token bluetoothLEWatcherReceivedToken;
         std::unique_ptr<flutter::EventSink<EncodableValue>> scan_result_sink_;
+
+        std::set<std::string> knownDevices;
     };
 
 } // namespace flutter
