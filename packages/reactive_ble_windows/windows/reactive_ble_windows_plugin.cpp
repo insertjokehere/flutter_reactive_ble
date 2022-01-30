@@ -96,6 +96,8 @@ namespace
 
         concurrency::task<std::shared_ptr<GattCommunicationStatus>> WriteCharacteristicAsync(CharacteristicAddress &charAddr, std::vector<uint8_t> value, bool withResponse);
 
+        concurrency::task<NegotiateMtuInfo> NegotiateMtuAsync(BluetoothDeviceAgent &bluetoothDeviceAgent, uint32_t mtuSize);
+
         std::unique_ptr<flutter::EventSink<EncodableValue>> connected_device_sink_;
         std::map<uint64_t, std::shared_ptr<BluetoothDeviceAgent>> connectedDevices{};
 
@@ -277,7 +279,6 @@ namespace
                 break;
             
             default:
-                std::cout << "Unknown error occurred reading characteristic." << std::endl;  // Debugging
                 result->Error("Unknown error occurred reading characteristic.");
                 return;
             }
@@ -318,7 +319,6 @@ namespace
             bool success = info.SerializeToArray(buffer, size);
             if (!success)
             {
-                std::cout << "Failed to serialize message into buffer." << std::endl;  // Debugging
                 free(buffer);
                 result->Error("Failed to serialize message into buffer.");
             }
@@ -346,9 +346,44 @@ namespace
             callingMethod = (methodName.compare("readNotifications") == 0) ? flutter::CallingMethod::subscribe : flutter::CallingMethod::unsubscribe;
             result->Success();  // Hand-over to characteristic handler
         }
-        else if (methodName.compare("negotiateMtuSize") == 0)  // Async data
+        else if (methodName.compare("negotiateMtuSize") == 0)
         {
-            result->NotImplemented();
+            std::pair<std::unique_ptr<NegotiateMtuRequest>, std::string> parseResult =
+                ParseArgsToRequest<NegotiateMtuRequest>(method_call.arguments());
+            if (!parseResult.second.empty())
+            {
+                result->Error(parseResult.second);
+                return;
+            }
+            std::string deviceID = parseResult.first->deviceid();
+            uint64_t addr = std::stoull(deviceID);
+            auto iter = connectedDevices.find(addr);
+            if (iter == connectedDevices.end())
+            {
+                result->Error("Not currently connected to selected device");
+                return;
+            }
+            auto mtuSize = parseResult.first->mtusize();
+            auto task { NegotiateMtuAsync(*iter->second, (uint32_t)mtuSize) };
+            NegotiateMtuInfo mtuInfo = task.get();
+
+            size_t size = mtuInfo.ByteSizeLong();
+            uint8_t *buffer = (uint8_t *)malloc(size);
+            bool success = mtuInfo.SerializeToArray(buffer, size);
+            if (!success)
+            {
+                free(buffer);
+                result->Error("Failed to serialize message into buffer.");
+            }
+            EncodableList encoded;
+            for (uint32_t i = 0; i < size; i++)
+            {
+                uint8_t val = buffer[i];
+                EncodableValue encodedVal = (EncodableValue)val;
+                encoded.push_back(encodedVal);
+            }
+            free(buffer);
+            result->Success(encoded);
         }
         else if (methodName.compare("requestConnectionPriority") == 0)  // data
         {
@@ -391,7 +426,6 @@ namespace
             bool success = info.SerializeToArray(buffer, size);
             if (!success)
             {
-                std::cout << "Failed to serialize message into buffer." << std::endl;  // Debugging
                 free(buffer);
                 result->Error("Failed to serialize message into buffer.");
             }
@@ -727,6 +761,27 @@ namespace
                 std::cerr << "Failed to write to characteristic. Can it be written to?" << std::endl;  // Debugging
                 return std::shared_ptr<GattCommunicationStatus>(nullptr);
             }
+        });
+    }
+
+
+    /**
+     * @brief MTU size on Windows cannot be negotiated, so this method returns the device's current MTU size.
+     * 
+     * @param bluetoothDeviceAgent Agent for the BLE device.
+     * @param mtuSize The requested MTU size, unused as MTU size cannot be negotiated on Windows.
+     * @return concurrency::task<NegotiateMtuInfo> A NegotiateMtuInfo containing the current MTU size.
+     */
+    concurrency::task<NegotiateMtuInfo> ReactiveBleWindowsPlugin::NegotiateMtuAsync(BluetoothDeviceAgent &bluetoothDeviceAgent, uint32_t mtuSize)
+    {
+        return concurrency::create_task([bluetoothDeviceAgent, mtuSize]
+        {
+            NegotiateMtuInfo mtuInfo;
+            auto deviceID = bluetoothDeviceAgent.device.BluetoothDeviceId();
+            mtuInfo.mutable_deviceid()->assign(to_string(deviceID.Id()));
+            auto gattSession = GattSession::FromDeviceIdAsync(deviceID).get();
+            mtuInfo.set_mtusize(gattSession.MaxPduSize());  // will set_mtusize work?
+            return mtuInfo;
         });
     }
 
