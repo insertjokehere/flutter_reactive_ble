@@ -194,7 +194,7 @@ class ReactiveBleWindowsPlatform extends ReactiveBlePlatform {
                 .createNegotiateMtuRequest(deviceId, mtu!)
                 .writeToBuffer(),
           )
-          .then((data) => _protobufConverter.mtuSizeFrom(data!));
+          .then((data) => _protobufConverter.mtuSizeFrom(List<int>.from(data!)));
 
   @override
   Future<ConnectionPriorityInfo> requestConnectionPriority(
