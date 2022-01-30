@@ -48,6 +48,7 @@ namespace flutter
             bool success = task.get();
             if (!success)
             {
+                std::cout << errorMessage << std::endl;
                 characteristic_sink_->EventSink::Error(errorMessage);
             }
             *callingMethod = CallingMethod::none;
@@ -76,6 +77,7 @@ namespace flutter
         bool success = info.SerializeToArray(buffer, size);
         if (!success)
         {
+            std::cout << "Failed to serialize message into buffer." << std::endl; // Debugging
             free(buffer);
             characteristic_sink_->EventSink::Error("Failed to serialize message into buffer.");  //TODO: Will this crash due to not having an error code?
             return;
