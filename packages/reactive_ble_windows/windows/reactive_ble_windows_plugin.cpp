@@ -493,6 +493,7 @@ namespace
             SendConnectionUpdate(std::to_string(addr), DeviceConnectionState::disconnected);
             co_return;
         }
+        device.RequestPreferredConnectionParameters(BluetoothLEPreferredConnectionParameters::ThroughputOptimized());
         auto servicesResult = co_await device.GetGattServicesAsync();
         if (servicesResult.Status() != GattCommunicationStatus::Success)
         {

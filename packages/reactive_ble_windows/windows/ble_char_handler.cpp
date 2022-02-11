@@ -182,13 +182,13 @@ namespace flutter
      * @param sender The notifying characteristic.
      * @param args The arguments of the changed characteristic.
      */
-    void BleCharHandler::GattCharacteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
+    winrt::fire_and_forget BleCharHandler::GattCharacteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
     {
         if (characteristic_sink_ == nullptr)
         {
             //TODO: Is there a way the sink can be handled to avoid this case? Currently very fragile
             std::cerr << "Error: Characteristic sink not yet initialized." << std::endl;
-            return;
+            co_return;
         }
 
         IBuffer characteristicValue = args.CharacteristicValue();
@@ -212,8 +212,11 @@ namespace flutter
 
         CharacteristicValueInfo updatedCharacteristic;
         updatedCharacteristic.mutable_characteristic()->CopyFrom(charAddr);
-        for (size_t i = 0; i < characteristicValue.Length(); i++)
-            updatedCharacteristic.mutable_value()->push_back(reader.ReadByte());
+
+        int length = characteristicValue.Length();
+        std::vector<uint8_t> data(length);
+        reader.ReadBytes(data);
+        updatedCharacteristic.set_value(std::string (data.begin(), data.end()));
 
         EncodeAndSend(updatedCharacteristic);
     }

@@ -79,7 +79,7 @@ namespace flutter
 
         concurrency::task<bool> SetNotifiableAsync(CharacteristicAddress charAddr, bool shouldSubscribe);
 
-        void GattCharacteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args);
+         winrt::fire_and_forget GattCharacteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args);
 
         CharacteristicAddress* characteristicAddress;
         winrt::Windows::Storage::Streams::IBuffer* characteristicBuffer;
