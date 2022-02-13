@@ -87,7 +87,7 @@ namespace
 
         concurrency::task<void> CleanConnection(uint64_t bluetoothAddress);
 
-        void ReactiveBleWindowsPlugin::SendConnectionUpdate(std::string address, DeviceConnectionState state);
+        void SendConnectionUpdate(std::string address, DeviceConnectionState state);
 
         template <typename T>
         std::pair<std::unique_ptr<T>, std::string> ParseArgsToRequest(const flutter::EncodableValue *args);
@@ -202,6 +202,7 @@ namespace
         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result)
     {
         std::string methodName = method_call.method_name();
+        std::cout << "GOT METHOD NAME " << methodName << std::endl;
         if (methodName.compare("initialize") == 0)
         {
             result->Success();
@@ -224,7 +225,7 @@ namespace
                 result->Error(parseResult.second);
                 return;
             }
-            uint64_t addr = std::stoull(parseResult.first->deviceid());
+            auto addr = std::stoull(parseResult.first->deviceid());
             ConnectAsync(addr);
             result->Success();
         }
@@ -282,7 +283,6 @@ namespace
                 result->Error("Unknown error occurred reading characteristic.");
                 return;
             }
-
             characteristicBuffer = readResult->Value();
             callingMethod = flutter::CallingMethod::read;
             result->Success();  //TODO: This method sets up for the OnListen, what happens on error in that method?
@@ -300,6 +300,11 @@ namespace
             CharacteristicAddress charAddr = parseResult.first->characteristic();
             std::string value = parseResult.first->value();
             std::vector<uint8_t> bytes(value.begin(), value.end());
+            std::cout << "SENDING: ";
+            for(auto x : bytes) {
+                std::cout << (int) x << ' ';
+            }
+            std::cout << std::endl;
 
             auto task { WriteCharacteristicAsync(charAddr, bytes, withResponse) };
             std::shared_ptr<GattCommunicationStatus> writeStatus = task.get();
@@ -410,7 +415,7 @@ namespace
                 result->Error("Not currently connected to selected device");
                 return;
             }
-            
+
             auto task { DiscoverServicesAsync(*iter->second) };
             std::list<DiscoveredService> data = task.get();
 
@@ -484,28 +489,51 @@ namespace
      * @param addr The address of the BLE device to connect to.
      * @return winrt::fire_and_forget
      */
-    winrt::fire_and_forget ReactiveBleWindowsPlugin::ConnectAsync(uint64_t addr)
+    winrt::fire_and_forget ReactiveBleWindowsPlugin::ConnectAsync(uint64_t deviceAddr)
     {
-        auto device = co_await BluetoothLEDevice::FromBluetoothAddressAsync(addr);
-        if (!device)
+        try
         {
-            OutputDebugString((L"FromBluetoothAddressAsync error: Could not find device identified by " + winrt::to_hstring(addr) + L"\n").c_str());
-            SendConnectionUpdate(std::to_string(addr), DeviceConnectionState::disconnected);
-            co_return;
+            std::cout << deviceAddr <<std::endl;
+            BluetoothLEDevice device = co_await BluetoothLEDevice::FromBluetoothAddressAsync(deviceAddr);
+
+            if (device == nullptr)
+            {
+                OutputDebugString((L"FromBluetoothAddressAsync error: Could not find device identified by " + winrt::to_hstring(deviceAddr) + L"\n").c_str());
+                SendConnectionUpdate(std::to_string(deviceAddr), DeviceConnectionState::disconnected);
+                co_return;
+            }
+            device.RequestPreferredConnectionParameters(BluetoothLEPreferredConnectionParameters::ThroughputOptimized());
+
+            if (device != nullptr)
+            {
+                auto servicesResult = co_await device.GetGattServicesAsync(BluetoothCacheMode::Uncached);
+
+                if (servicesResult.Status() != GattCommunicationStatus::Success)
+                {
+                    OutputDebugString((L"GetGattServicesAsync error: " + winrt::to_hstring((int32_t)servicesResult.Status()) + L"\n").c_str());
+                    SendConnectionUpdate(std::to_string(deviceAddr), DeviceConnectionState::disconnected);
+                    co_return;
+                }
+
+                auto connnectionStatusChangedToken = device.ConnectionStatusChanged({this, &ReactiveBleWindowsPlugin::BluetoothLEDevice_ConnectionStatusChanged});
+                auto deviceAgent = std::make_unique<BluetoothDeviceAgent>(device, connnectionStatusChangedToken);
+                auto pair = std::make_pair(deviceAddr, std::move(deviceAgent));
+                connectedDevices.insert(std::move(pair));
+                SendConnectionUpdate(std::to_string(deviceAddr), DeviceConnectionState::connected);
+                co_return;
+            }
         }
-        device.RequestPreferredConnectionParameters(BluetoothLEPreferredConnectionParameters::ThroughputOptimized());
-        auto servicesResult = co_await device.GetGattServicesAsync();
-        if (servicesResult.Status() != GattCommunicationStatus::Success)
+        catch (winrt::hresult_error &ex)
         {
-            OutputDebugString((L"GetGattServicesAsync error: " + winrt::to_hstring((int32_t)servicesResult.Status()) + L"\n").c_str());
-            SendConnectionUpdate(std::to_string(addr), DeviceConnectionState::disconnected);
-            co_return;
+            if (ex.to_abi() == HRESULT_FROM_WIN32(ERROR_DEVICE_NOT_AVAILABLE))
+            {
+                OutputDebugString(L"Bluetooth radio is not on");
+            }
+            else
+            {
+                throw;
+            }
         }
-        auto connnectionStatusChangedToken = device.ConnectionStatusChanged({this, &ReactiveBleWindowsPlugin::BluetoothLEDevice_ConnectionStatusChanged});
-        auto deviceAgent = std::make_unique<BluetoothDeviceAgent>(device, connnectionStatusChangedToken);
-        auto pair = std::make_pair(addr, std::move(deviceAgent));
-        connectedDevices.insert(std::move(pair));
-        SendConnectionUpdate(std::to_string(addr), DeviceConnectionState::connected);
     }
 
 

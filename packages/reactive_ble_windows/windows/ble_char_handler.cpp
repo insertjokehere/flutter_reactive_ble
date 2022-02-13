@@ -127,15 +127,17 @@ namespace flutter
     {
         return concurrency::create_task([this, charAddr, shouldSubscribe]
         {
-            std::string deviceID = charAddr.deviceid();
-            uint64_t addr = std::stoull(deviceID);
+            auto addr = std::stoull(charAddr.deviceid());
+            
             auto iter = connectedDevices->find(addr);
             if (iter == connectedDevices->end()) return false;
 
             BluetoothDeviceAgent agent = *iter->second;
             std::string serviceUuid = BleUtils::ProtobufUuidToString(charAddr.serviceuuid());
             std::string charUuid = BleUtils::ProtobufUuidToString(charAddr.characteristicuuid());
-            auto gattChar = agent.GetCharacteristicAsync(serviceUuid, charUuid).get();
+
+            gattChar = nullptr;
+            gattChar = agent.GetCharacteristicAsync(serviceUuid, charUuid).get();
             GattClientCharacteristicConfigurationDescriptorValue descriptor = GattClientCharacteristicConfigurationDescriptorValue::None;
             if (shouldSubscribe)
             {
@@ -184,6 +186,13 @@ namespace flutter
      */
     winrt::fire_and_forget BleCharHandler::GattCharacteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
     {
+        // I'm not sure if the next line is actually required. Including it
+        // seems to make MyTASKA's hot restart feature work, so we're keeping
+        // it for now. Todo: further testing.
+        co_await winrt::resume_background(); 
+        auto characteristicValue = args.CharacteristicValue();
+        auto length = characteristicValue.Length();
+
         if (characteristic_sink_ == nullptr)
         {
             //TODO: Is there a way the sink can be handled to avoid this case? Currently very fragile
@@ -191,9 +200,7 @@ namespace flutter
             co_return;
         }
 
-        IBuffer characteristicValue = args.CharacteristicValue();
         auto reader = winrt::Windows::Storage::Streams::DataReader::FromBuffer(characteristicValue);
-        reader.UnicodeEncoding(winrt::Windows::Storage::Streams::UnicodeEncoding::Utf8);
 
         GattDeviceService service = sender.Service();
         uint64_t bluetoothAddr = service.Device().BluetoothAddress();
@@ -213,7 +220,6 @@ namespace flutter
         CharacteristicValueInfo updatedCharacteristic;
         updatedCharacteristic.mutable_characteristic()->CopyFrom(charAddr);
 
-        int length = characteristicValue.Length();
         std::vector<uint8_t> data(length);
         reader.ReadBytes(data);
         updatedCharacteristic.set_value(std::string (data.begin(), data.end()));

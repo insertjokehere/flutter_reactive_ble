@@ -72,11 +72,17 @@ namespace flutter
         // bleWatcher.Start();
         initialized = true;
 
+        auto deviceQuery = L"\
+            (System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\") AND \
+            (System.Devices.Aep.Bluetooth.Le.IsConnectable:=System.StructuredQueryType.Boolean#True)";
 
-        winrt::hstring aqsAllBluetoothLEDevices = L"(System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\")";
-        auto requestedProperties = winrt::single_threaded_vector<winrt::hstring>({ L"System.Devices.Aep.SignalStrength" });
+        auto requestedProperties = winrt::single_threaded_vector<winrt::hstring>({
+            L"System.Devices.Aep.DeviceAddress",
+            L"System.Devices.Aep.SignalStrength",
+        });
+
         deviceWatcher = DeviceInformation::CreateWatcher(
-            aqsAllBluetoothLEDevices,
+            deviceQuery,
             requestedProperties,
             DeviceInformationKind::AssociationEndpoint);
 
@@ -114,6 +120,8 @@ namespace flutter
 
         if (deviceWatcher != nullptr)
         {
+            deviceWatcher.Stop(); // Stop watcher before unregistering event handlers.
+
             // Unregister the event handlers.
             deviceWatcher.Added(deviceWatcherAddedToken);
             deviceWatcher.Updated(deviceWatcherUpdatedToken);
@@ -121,8 +129,6 @@ namespace flutter
             deviceWatcher.EnumerationCompleted(deviceWatcherEnumerationCompletedToken);
             deviceWatcher.Stopped(deviceWatcherStoppedToken);
 
-            // Stop the watcher.
-            deviceWatcher.Stop();
             deviceWatcher = nullptr;
         }
 
@@ -169,8 +175,16 @@ namespace flutter
         if (scan_result_sink_ && sender == deviceWatcher)
         {
             DeviceScanInfo info;
-            std::string id = to_string(deviceInfo.Id());
-            info.set_id(id);
+
+            auto addrProperty = deviceInfo.Properties().TryLookup(L"System.Devices.Aep.DeviceAddress");
+            if (!addrProperty)
+                return;
+
+            auto stringId = winrt::to_string(winrt::unbox_value<winrt::hstring>(addrProperty));
+            stringId.erase(std::remove(stringId.begin(), stringId.end(), ':'), stringId.end());
+            uint64_t btaddr = std::strtoull(stringId.c_str(), NULL, 16);
+
+            info.set_id(std::to_string(btaddr));
             info.set_name(to_string(deviceInfo.Name()));
             // auto manData = deviceInfo.Properties().TryLookup(L"System.Devices.Aep.Manufacturer");
             // winrt::hstring unboxedData = winrt::unbox_value<winrt::hstring>(manData);
@@ -184,7 +198,7 @@ namespace flutter
                 info.set_rssi(rssi);
             }
             SendDeviceScanInfo(info);
-            discoveredDevices.insert_or_assign(id, info);
+            discoveredDevices.insert_or_assign(std::to_string(btaddr), info);
         }
     }
 
