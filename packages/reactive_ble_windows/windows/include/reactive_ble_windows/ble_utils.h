@@ -21,6 +21,7 @@ namespace BleUtils {
     std::string GuidToString(winrt::guid);
     std::vector<uint8_t> GuidToByteVec(winrt::guid guid);
     std::string ProtobufUuidToString(Uuid uuid);
+    winrt::guid ProtobufUuidToGuid(Uuid uuid);
 }
 
 #endif

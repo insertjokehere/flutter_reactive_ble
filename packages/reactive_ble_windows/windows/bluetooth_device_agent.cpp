@@ -57,6 +57,4 @@ namespace
         }
         co_return gattCharacteristics.at(characteristic);
     }
-
-
 } // namespace

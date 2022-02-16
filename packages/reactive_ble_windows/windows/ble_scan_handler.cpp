@@ -12,49 +12,6 @@ namespace flutter
     using namespace winrt::Windows::Storage::Streams;
 
 
-    union uint16_t_union
-    {
-        uint16_t uint16;
-        byte bytes[sizeof(uint16_t)];
-    };
-
-
-    /**
-     * @brief Converts IBuffer to byte vector.
-     * 
-     * @param buffer The buffer to be converted.
-     * @return std::vector<uint8_t> The buffer contents as bytes.
-     */
-    std::vector<uint8_t> to_bytevc(IBuffer buffer)
-    {
-        auto reader = DataReader::FromBuffer(buffer);
-        auto result = std::vector<uint8_t>(reader.UnconsumedBufferLength());
-        reader.ReadBytes(result);
-        return result;
-    }
-
-
-    /**
-     * @brief Parse advertised manufacturer data into bytes.
-     * 
-     * @param advertisement The BLE advertisement containing manufacturer data.
-     * @return std::vector<uint8_t> The parsed manufacturer data as bytes.
-     */
-    std::vector<uint8_t> parseManufacturerData(BluetoothLEAdvertisement advertisement)
-    {
-        if (advertisement.ManufacturerData().Size() == 0) return std::vector<uint8_t>();
-
-        auto manufacturerData = advertisement.ManufacturerData().GetAt(0);
-        // FIXME Compat with REG_DWORD_BIG_ENDIAN
-        uint8_t *prefix = uint16_t_union{manufacturerData.CompanyId()}.bytes;
-        auto result = std::vector<uint8_t>{prefix, prefix + sizeof(uint16_t_union)};
-
-        auto data = to_bytevc(manufacturerData.Data());
-        result.insert(result.end(), data.begin(), data.end());
-        return result;
-    }
-
-
     /**
      * @brief Handler for OnListen to BLE scanning for devices.
      * 
@@ -65,11 +22,7 @@ namespace flutter
     std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleScanHandler::OnListenInternal(
         const EncodableValue *arguments, std::unique_ptr<flutter::EventSink<EncodableValue>> &&events)
     {
-        std::cout << "Scan OnListen" << std::endl;
         scan_result_sink_ = std::move(events);
-        // bleWatcher = BluetoothLEAdvertisementWatcher();
-        // bluetoothLEWatcherReceivedToken = bleWatcher.Received({this, &BleScanHandler::OnAdvertisementReceived});
-        // bleWatcher.Start();
         initialized = true;
 
         auto deviceQuery = L"\
@@ -86,12 +39,10 @@ namespace flutter
             requestedProperties,
             DeviceInformationKind::AssociationEndpoint);
 
-        
-        // // Register event handlers before starting the watcher.
+        // Register event handlers before starting the watcher.
         deviceWatcherAddedToken = deviceWatcher.Added({ this, &BleScanHandler::DeviceWatcher_Added });
         deviceWatcherUpdatedToken = deviceWatcher.Updated({ this, &BleScanHandler::DeviceWatcher_Updated });
         deviceWatcherRemovedToken = deviceWatcher.Removed({ this, &BleScanHandler::DeviceWatcher_Removed });
-        deviceWatcherEnumerationCompletedToken = deviceWatcher.EnumerationCompleted({ this, &BleScanHandler::DeviceWatcher_EnumerationCompleted });
         deviceWatcherStoppedToken = deviceWatcher.Stopped({ this, &BleScanHandler::DeviceWatcher_Stopped });
 
         deviceWatcher.Start();
@@ -109,14 +60,7 @@ namespace flutter
     std::unique_ptr<flutter::StreamHandlerError<EncodableValue>> BleScanHandler::OnCancelInternal(
         const EncodableValue *arguments)
     {
-        std::cout << "Scan OnCancel" << std::endl;
         scan_result_sink_ = nullptr;
-        // if (initialized && bleWatcher.Status() == BluetoothLEAdvertisementWatcherStatus::Started)
-        // {
-        //     bleWatcher.Stop();
-        //     bleWatcher.Received(bluetoothLEWatcherReceivedToken);
-        //     bleWatcher = nullptr;
-        // }
 
         if (deviceWatcher != nullptr)
         {
@@ -126,7 +70,6 @@ namespace flutter
             deviceWatcher.Added(deviceWatcherAddedToken);
             deviceWatcher.Updated(deviceWatcherUpdatedToken);
             deviceWatcher.Removed(deviceWatcherRemovedToken);
-            deviceWatcher.EnumerationCompleted(deviceWatcherEnumerationCompletedToken);
             deviceWatcher.Stopped(deviceWatcherStoppedToken);
 
             deviceWatcher = nullptr;
@@ -139,35 +82,9 @@ namespace flutter
     /**
      * @brief Callback for when a BLE advertisement has been received.
      * 
-     * @param watcher The BLE watcher which received the advertisement.
-     * @param args The arguments of the received BLE advertisement.
+     * @param sender The watcher which received the advertisement.
+     * @param deviceInfo The information advertised by the device.
      */
-    // void BleScanHandler::OnAdvertisementReceived(
-    //     BluetoothLEAdvertisementWatcher watcher,
-    //     BluetoothLEAdvertisementReceivedEventArgs args)
-    // {
-    //     std::cout << "Scan OnAdvertisementReceived" << std::endl;
-    //     if (scan_result_sink_)
-    //     {
-    //         auto manufacturer_data = parseManufacturerData(args.Advertisement());
-    //         std::string str(manufacturer_data.begin(), manufacturer_data.end());
-
-    //         std::stringstream sstream;
-    //         sstream << std::hex << args.BluetoothAddress();
-    //         std::string localName = winrt::to_string(args.Advertisement().LocalName());
-
-    //         DeviceScanInfo info;
-    //         info.set_id(std::to_string(args.BluetoothAddress()));
-    //         // If the local name is empty, use a hex representation of the device address
-    //         info.set_name((localName.empty()) ? sstream.str() : localName);
-    //         info.set_manufacturerdata(str);
-    //         info.add_serviceuuids();
-    //         info.add_servicedata();
-    //         info.set_rssi(args.RawSignalStrengthInDBm());
-    //         SendDeviceScanInfo(info);
-    //     }
-    // }
-
     void BleScanHandler::DeviceWatcher_Added(
         DeviceWatcher sender,
         DeviceInformation deviceInfo)
@@ -175,7 +92,6 @@ namespace flutter
         if (scan_result_sink_ && sender == deviceWatcher)
         {
             DeviceScanInfo info;
-
             auto addrProperty = deviceInfo.Properties().TryLookup(L"System.Devices.Aep.DeviceAddress");
             if (!addrProperty)
                 return;
@@ -186,70 +102,91 @@ namespace flutter
 
             info.set_id(std::to_string(btaddr));
             info.set_name(to_string(deviceInfo.Name()));
-            // auto manData = deviceInfo.Properties().TryLookup(L"System.Devices.Aep.Manufacturer");
-            // winrt::hstring unboxedData = winrt::unbox_value<winrt::hstring>(manData);
-            // info.set_manufacturerdata(to_string(unboxedData));
             info.add_serviceuuids();
             info.add_servicedata();
-            auto property = deviceInfo.Properties().TryLookup(L"System.Devices.Aep.SignalStrength");
-            if (property)
+
+            auto manData = deviceInfo.Properties().TryLookup(L"System.Devices.Aep.Manufacturer");
+            if (manData)
             {
-                int32_t rssi = winrt::unbox_value<int32_t>(property);
+                winrt::hstring unboxedData = winrt::unbox_value<winrt::hstring>(manData);
+                info.set_manufacturerdata(to_string(unboxedData));
+            }
+
+            auto rssiProperty = deviceInfo.Properties().TryLookup(L"System.Devices.Aep.SignalStrength");
+            if (rssiProperty)
+            {
+                int32_t rssi = winrt::unbox_value<int32_t>(rssiProperty);
                 info.set_rssi(rssi);
             }
+
             SendDeviceScanInfo(info);
             discoveredDevices.insert_or_assign(std::to_string(btaddr), info);
         }
     }
 
+
+    /**
+     * @brief Callback for when a device advertises updated information.
+     * 
+     * @param sender The watcher which received the update advertisement.
+     * @param deviceInfoUpdate The updated information advertised by the device.
+     */
     void BleScanHandler::DeviceWatcher_Updated(
         DeviceWatcher sender,
         DeviceInformationUpdate deviceInfoUpdate)
     {
         if (sender != deviceWatcher)
             return;
-        
+
         auto iter = discoveredDevices.find(to_string(deviceInfoUpdate.Id()));
         if (iter == discoveredDevices.end()) return;
         DeviceScanInfo deviceInfo = iter->second;
 
-        // auto manData = deviceInfo.Properties().TryLookup(L"System.Devices.Aep.Manufacturer");
-        // winrt::hstring unboxedData = winrt::unbox_value<winrt::hstring>(manData);
-        // info.set_manufacturerdata(to_string(unboxedData));
-
-        auto property = deviceInfoUpdate.Properties().TryLookup(L"System.Devices.Aep.SignalStrength");
-        if (property)
+        auto manData = deviceInfoUpdate.Properties().TryLookup(L"System.Devices.Aep.Manufacturer");
+        if (manData)
         {
-            int32_t rssi = winrt::unbox_value<int32_t>(property);
+            winrt::hstring unboxedData = winrt::unbox_value<winrt::hstring>(manData);
+            deviceInfo.set_manufacturerdata(to_string(unboxedData));
+        }
+
+        auto rssiProperty = deviceInfoUpdate.Properties().TryLookup(L"System.Devices.Aep.SignalStrength");
+        if (rssiProperty)
+        {
+            int32_t rssi = winrt::unbox_value<int32_t>(rssiProperty);
             deviceInfo.set_rssi(rssi);
         }
         SendDeviceScanInfo(deviceInfo);
         discoveredDevices.insert_or_assign(deviceInfo.id(), deviceInfo);
     }
 
+
+    /**
+     * @brief Callback for when a previously advertised device is no longer discoverable.
+     * 
+     * @param sender The device watcher.
+     * @param deviceInfoUpdate The device which is no longer discoverable.
+     */
     void BleScanHandler::DeviceWatcher_Removed(
         DeviceWatcher sender,
         DeviceInformationUpdate deviceInfoUpdate)
     {
-        // How should this work with Flutter?
+        // TODO: How should this work with Flutter, as the discovered devices list is managed elsewhere?
         auto iter = discoveredDevices.find(to_string(deviceInfoUpdate.Id()));
         if (iter == discoveredDevices.end()) return;
         discoveredDevices.erase(iter);
     }
 
-    void BleScanHandler::DeviceWatcher_EnumerationCompleted(
-        DeviceWatcher sender,
-        IInspectable const&)
-    {
-        // Is this necessary?
-        std::cout << "DeviceWatcher Enumeration Completed" << std::endl;
-    }
 
+    /**
+     * @brief Callback for when the device watcher has been stopped. Currently no implemented behaviour.
+     * 
+     * @param sender The device watcher which was stopped.
+     */
     void BleScanHandler::DeviceWatcher_Stopped(
         DeviceWatcher sender,
         IInspectable const&)
     {
-        std::cout << "DeviceWatcher Stopped" << std::endl;
+        // No behaviour needed, but the method must be implemented.
     }
 
 

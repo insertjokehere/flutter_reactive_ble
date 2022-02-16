@@ -45,9 +45,7 @@ std::vector<uint8_t> BleUtils::GuidToByteVec(winrt::guid guid)
 
     // guid.Data4 = uint8_t[8] so no reverse order needed
     for (int i = 0; i < 8; i++)
-    {
         result.push_back(*(guid.Data4 + i));
-    }
 
     return result;
 }
@@ -77,5 +75,26 @@ std::string BleUtils::ProtobufUuidToString(Uuid uuid)
     result.insert(16, "-");
     result.insert(12, "-");
     result.insert(8, "-");
+    return result;
+}
+
+
+/**
+ * @brief Converts a Uuid (defined by bledata.proto) into a winrt::guid.
+ * 
+ * @param uuid The Uuid to convert into a guid.
+ * @return winrt::guid The guid equivalent of the given Uuid.
+ */
+winrt::guid BleUtils::ProtobufUuidToGuid(Uuid uuid)
+{
+    winrt::guid result;
+    unsigned char* rawData = (unsigned char*) uuid.data().c_str();
+    result.Data1 = (rawData[0] << 24) | (rawData[1] << 16) | (rawData[2] << 8) | rawData[3];
+    result.Data2 = (rawData[4] << 8) | rawData[5];
+    result.Data3 = (rawData[6] << 8) | rawData[7];
+
+    for (int i = 0; i < 8; i++)
+        result.Data4[i] = rawData[8 + i];
+
     return result;
 }

@@ -90,13 +90,21 @@ namespace
         void SendConnectionUpdate(std::string address, DeviceConnectionState state);
 
         template <typename T>
+        std::shared_ptr<EncodableList> MessageToEncodableList(T data);
+
+        template <typename T>
         std::pair<std::unique_ptr<T>, std::string> ParseArgsToRequest(const flutter::EncodableValue *args);
 
         concurrency::task<std::shared_ptr<GattReadResult>> ReadCharacteristicAsync(CharacteristicAddress &charAddr);
 
-        concurrency::task<std::shared_ptr<GattCommunicationStatus>> WriteCharacteristicAsync(CharacteristicAddress &charAddr, std::vector<uint8_t> value, bool withResponse);
+        concurrency::task<std::shared_ptr<GattCommunicationStatus>> WriteCharacteristicAsync(CharacteristicAddress &charAddr,
+            std::vector<uint8_t> value, bool withResponse);
 
         concurrency::task<NegotiateMtuInfo> NegotiateMtuAsync(BluetoothDeviceAgent &bluetoothDeviceAgent, uint32_t mtuSize);
+
+        // Variables
+
+        std::vector<winrt::hstring> scanParams;
 
         std::unique_ptr<flutter::EventSink<EncodableValue>> connected_device_sink_;
         std::map<uint64_t, std::shared_ptr<BluetoothDeviceAgent>> connectedDevices{};
@@ -167,7 +175,8 @@ namespace
             std::make_unique<flutter::EventChannel<EncodableValue>>(
                 registrar->messenger(), "flutter_reactive_ble_scan",
                 &flutter::StandardMethodCodec::GetInstance());
-        std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> scanHandler = std::make_unique<flutter::BleScanHandler>();
+        std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> scanHandler =
+            std::make_unique<flutter::BleScanHandler>(&scanParams);
         scanChannel->SetStreamHandler(std::move(scanHandler));
 
         characteristicBuffer = IBuffer();
@@ -183,7 +192,8 @@ namespace
             std::make_unique<flutter::EventChannel<EncodableValue>>(
                 registrar->messenger(), "flutter_reactive_ble_char_update",
                 &flutter::StandardMethodCodec::GetInstance());
-        std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> charHandler = std::make_unique<flutter::BleCharHandler>(ptrs);
+        std::unique_ptr<flutter::StreamHandler<flutter::EncodableValue>> charHandler =
+            std::make_unique<flutter::BleCharHandler>(ptrs);
         characteristicChannel->SetStreamHandler(std::move(charHandler));
     }
 
@@ -202,7 +212,6 @@ namespace
         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result)
     {
         std::string methodName = method_call.method_name();
-        std::cout << "GOT METHOD NAME " << methodName << std::endl;
         if (methodName.compare("initialize") == 0)
         {
             result->Success();
@@ -213,7 +222,26 @@ namespace
         }
         else if (methodName.compare("scanForDevices") == 0)
         {
-            //TODO: Use scan parameters (List<Uuid> withServices, ScanMode scanMode, bool requireLocationServicesEnabled)?
+            //TODO: Use scan parameter List<Uuid> withServices?
+            // Note: Unless there is some way of filtering via the device watcher which I
+            //       have not been able to find, for such filtering to occur a connection
+            //       must be established with the advertising device and the service UUIDs
+            //       subsequently obtained. This would likely significantly slow down scanning.
+
+            // scanMode and requireLocationServicesEnabled are Android specific, so are ignored.
+            scanParams.clear();
+            std::pair<std::unique_ptr<ScanForDevicesRequest>, std::string> parseResult =
+                ParseArgsToRequest<ScanForDevicesRequest>(method_call.arguments());
+            if (!parseResult.second.empty())
+            {
+                result->Error(parseResult.second);
+                return;
+            }
+            for (auto uuid : parseResult.first->serviceuuids())
+            {
+                std::string uuidStr = BleUtils::ProtobufUuidToString(uuid);
+                scanParams.push_back(winrt::to_hstring(uuidStr));
+            }
             result->Success();
         }
         else if (methodName.compare("connectToDevice") == 0)
@@ -285,9 +313,10 @@ namespace
             }
             characteristicBuffer = readResult->Value();
             callingMethod = flutter::CallingMethod::read;
-            result->Success();  //TODO: This method sets up for the OnListen, what happens on error in that method?
+            result->Success();
         }
-        else if (methodName.compare("writeCharacteristicWithResponse") == 0 || methodName.compare("writeCharacteristicWithoutResponse") == 0)
+        else if (methodName.compare("writeCharacteristicWithResponse") == 0
+                || methodName.compare("writeCharacteristicWithoutResponse") == 0)
         {
             bool withResponse = methodName.compare("writeCharacteristicWithResponse") == 0;
             std::pair<std::unique_ptr<WriteCharacteristicRequest>, std::string> parseResult =
@@ -300,11 +329,6 @@ namespace
             CharacteristicAddress charAddr = parseResult.first->characteristic();
             std::string value = parseResult.first->value();
             std::vector<uint8_t> bytes(value.begin(), value.end());
-            std::cout << "SENDING: ";
-            for(auto x : bytes) {
-                std::cout << (int) x << ' ';
-            }
-            std::cout << std::endl;
 
             auto task { WriteCharacteristicAsync(charAddr, bytes, withResponse) };
             std::shared_ptr<GattCommunicationStatus> writeStatus = task.get();
@@ -317,26 +341,13 @@ namespace
 
             WriteCharacteristicInfo info;
             info.mutable_characteristic()->CopyFrom(charAddr);
-
-            //TODO: Convert encoding process into method to reduce code duplication
-            size_t size = info.ByteSizeLong();
-            uint8_t *buffer = (uint8_t *)malloc(size);
-            bool success = info.SerializeToArray(buffer, size);
-            if (!success)
+            auto encoded = ReactiveBleWindowsPlugin::MessageToEncodableList(info);
+            if (encoded == nullptr)
             {
-                free(buffer);
                 result->Error("Failed to serialize message into buffer.");
+                return;
             }
-
-            EncodableList encoded;
-            for (uint32_t i = 0; i < size; i++)
-            {
-                uint8_t val = buffer[i];
-                EncodableValue encodedVal = (EncodableValue)val;
-                encoded.push_back(encodedVal);
-            }
-            free(buffer);
-            result->Success(encoded);
+            result->Success(*encoded);
         }
         else if (methodName.compare("readNotifications") == 0 || methodName.compare("stopNotifications") == 0)
         {
@@ -348,7 +359,8 @@ namespace
                 return;
             }
             characteristicAddress = parseResult.first->characteristic();
-            callingMethod = (methodName.compare("readNotifications") == 0) ? flutter::CallingMethod::subscribe : flutter::CallingMethod::unsubscribe;
+            callingMethod = (methodName.compare("readNotifications") == 0) ?
+                flutter::CallingMethod::subscribe : flutter::CallingMethod::unsubscribe;
             result->Success();  // Hand-over to characteristic handler
         }
         else if (methodName.compare("negotiateMtuSize") == 0)
@@ -371,24 +383,13 @@ namespace
             auto mtuSize = parseResult.first->mtusize();
             auto task { NegotiateMtuAsync(*iter->second, (uint32_t)mtuSize) };
             NegotiateMtuInfo mtuInfo = task.get();
-
-            size_t size = mtuInfo.ByteSizeLong();
-            uint8_t *buffer = (uint8_t *)malloc(size);
-            bool success = mtuInfo.SerializeToArray(buffer, size);
-            if (!success)
+            auto encoded = ReactiveBleWindowsPlugin::MessageToEncodableList(mtuInfo);
+            if (encoded == nullptr)
             {
-                free(buffer);
                 result->Error("Failed to serialize message into buffer.");
+                return;
             }
-            EncodableList encoded;
-            for (uint32_t i = 0; i < size; i++)
-            {
-                uint8_t val = buffer[i];
-                EncodableValue encodedVal = (EncodableValue)val;
-                encoded.push_back(encodedVal);
-            }
-            free(buffer);
-            result->Success(encoded);
+            result->Success(*encoded);
         }
         else if (methodName.compare("requestConnectionPriority") == 0)  // data
         {
@@ -400,7 +401,8 @@ namespace
         }
         else if (methodName.compare("discoverServices") == 0)
         {
-            std::pair<std::unique_ptr<DiscoverServicesRequest>, std::string> parseResult = ParseArgsToRequest<DiscoverServicesRequest>(method_call.arguments());
+            std::pair<std::unique_ptr<DiscoverServicesRequest>, std::string> parseResult =
+                ParseArgsToRequest<DiscoverServicesRequest>(method_call.arguments());
             if (!parseResult.second.empty())
             {
                 result->Error(parseResult.second);
@@ -493,12 +495,12 @@ namespace
     {
         try
         {
-            std::cout << deviceAddr <<std::endl;
             BluetoothLEDevice device = co_await BluetoothLEDevice::FromBluetoothAddressAsync(deviceAddr);
 
             if (device == nullptr)
             {
-                OutputDebugString((L"FromBluetoothAddressAsync error: Could not find device identified by " + winrt::to_hstring(deviceAddr) + L"\n").c_str());
+                OutputDebugString((L"FromBluetoothAddressAsync error: Could not find device identified by "
+                    + winrt::to_hstring(deviceAddr) + L"\n").c_str());
                 SendConnectionUpdate(std::to_string(deviceAddr), DeviceConnectionState::disconnected);
                 co_return;
             }
@@ -510,12 +512,15 @@ namespace
 
                 if (servicesResult.Status() != GattCommunicationStatus::Success)
                 {
-                    OutputDebugString((L"GetGattServicesAsync error: " + winrt::to_hstring((int32_t)servicesResult.Status()) + L"\n").c_str());
+                    OutputDebugString((L"GetGattServicesAsync error: " + winrt::to_hstring((int32_t)servicesResult.Status())
+                        + L"\n").c_str());
                     SendConnectionUpdate(std::to_string(deviceAddr), DeviceConnectionState::disconnected);
                     co_return;
                 }
 
-                auto connnectionStatusChangedToken = device.ConnectionStatusChanged({this, &ReactiveBleWindowsPlugin::BluetoothLEDevice_ConnectionStatusChanged});
+                auto connnectionStatusChangedToken = device.ConnectionStatusChanged({
+                    this, &ReactiveBleWindowsPlugin::BluetoothLEDevice_ConnectionStatusChanged
+                });
                 auto deviceAgent = std::make_unique<BluetoothDeviceAgent>(device, connnectionStatusChangedToken);
                 auto pair = std::make_pair(deviceAddr, std::move(deviceAgent));
                 connectedDevices.insert(std::move(pair));
@@ -541,7 +546,8 @@ namespace
      * @brief Create a task to asyncrhonously obtain the services of the connected BLE device.
      * 
      * @param bluetoothDeviceAgent Agent for the BLE device.
-     * @return concurrency::task<std::list<DiscoveredService>> Asynchronous object which will return a list of discovered services from the BLE device.
+     * @return concurrency::task<std::list<DiscoveredService>> Asynchronous object which will
+     *         return a list of discovered services from the BLE device.
      */
     concurrency::task<std::list<DiscoveredService>> ReactiveBleWindowsPlugin::DiscoverServicesAsync(BluetoothDeviceAgent &bluetoothDeviceAgent)
     {
@@ -551,7 +557,8 @@ namespace
             std::list<DiscoveredService> result;
             if (servicesResult.Status() != GattCommunicationStatus::Success)
             {
-                OutputDebugString((L"GetGattServicesAsync error: " + winrt::to_hstring((int32_t)servicesResult.Status()) + L"\n").c_str());
+                OutputDebugString((L"GetGattServicesAsync error: " + winrt::to_hstring((int32_t)servicesResult.Status())
+                    + L"\n").c_str());
                 return result;
             }
             winrt::Windows::Foundation::Collections::IVectorView<GattDeviceService> services = servicesResult.Services();
@@ -564,18 +571,21 @@ namespace
                 for (auto p = serviceUuidBytes.begin(); p != serviceUuidBytes.end(); p++)
                     converted.mutable_serviceuuid()->mutable_data()->push_back(*p);
 
-                winrt::Windows::Foundation::Collections::IVectorView includedServices = service.GetIncludedServicesAsync().get().Services();
+                winrt::Windows::Foundation::Collections::IVectorView includedServices =
+                    service.GetIncludedServicesAsync().get().Services();
                 converted.add_includedservices();
                 for (size_t j = 0; j < includedServices.Size(); j++)            
                 {
                     DiscoveredService tmp;
-                    std::vector<uint8_t> includedUuidBytes = BleUtils::GuidToByteVec(includedServices.GetAt(j).Uuid());
+                    std::vector<uint8_t> includedUuidBytes =
+                        BleUtils::GuidToByteVec(includedServices.GetAt(j).Uuid());
                     for (auto q = includedUuidBytes.begin(); q != includedUuidBytes.end(); q++)
                         tmp.mutable_serviceuuid()->mutable_data()->push_back(*q);
                     converted.add_includedservices()->CopyFrom(tmp);
                 }
 
-                winrt::Windows::Foundation::Collections::IVectorView characteristics = service.GetCharacteristicsAsync().get().Characteristics();
+                winrt::Windows::Foundation::Collections::IVectorView characteristics =
+                    service.GetCharacteristicsAsync().get().Characteristics();
                 for (size_t j = 0; j < characteristics.Size(); j++)            
                 {
                     GattCharacteristic tmp_char = characteristics.GetAt(j);
@@ -607,14 +617,16 @@ namespace
 
 
     /**
-     * @brief Handler for "connection status changed" event on connected BLE device. Currently only acts on change to the disconnected state.
+     * @brief Handler for "connection status changed" event on connected BLE device.
+     *        Currently only acts on change to the disconnected state.
      * 
      * @param sender The connected BLE device whose status changed.
      * @param args Unused parameter required by the interface.
      */
     void ReactiveBleWindowsPlugin::BluetoothLEDevice_ConnectionStatusChanged(BluetoothLEDevice sender, IInspectable args)
     {
-        OutputDebugString((L"ConnectionStatusChanged " + winrt::to_hstring((int32_t)sender.ConnectionStatus()) + L"\n").c_str());
+        OutputDebugString((L"ConnectionStatusChanged " + winrt::to_hstring((int32_t)sender.ConnectionStatus())
+            + L"\n").c_str());
         if (sender.ConnectionStatus() == BluetoothConnectionStatus::Disconnected)
         {
             CleanConnection(sender.BluetoothAddress()).get();
@@ -665,15 +677,30 @@ namespace
         DeviceInfo info;
         info.set_id(address);
         info.set_connectionstate(state);
+        auto result = ReactiveBleWindowsPlugin::MessageToEncodableList(info);
+        if (result == nullptr) return;
+        connected_device_sink_->EventSink::Success(*result);
+    }
 
-        size_t size = info.ByteSizeLong();
+
+    /**
+     * @brief Serializes a google::protobuf::Message into a Flutter EncodableList.
+     * 
+     * @tparam T The type of Message being serialized.
+     * @param data The Message of type T to serialize.
+     * @return std::shared_ptr<EncodableList> Pointer to the EncodableList containing the serialized Message, or nullptr on error.
+     */
+    template <typename T>
+    std::shared_ptr<EncodableList> ReactiveBleWindowsPlugin::MessageToEncodableList(T data)
+    {
+        size_t size = data.ByteSizeLong();
         uint8_t *buffer = (uint8_t *)malloc(size);
-        bool success = info.SerializeToArray(buffer, size);
+        bool success = data.SerializeToArray(buffer, size);
         if (!success)
         {
             std::cout << "Failed to serialize message into buffer." << std::endl; // Debugging
             free(buffer);
-            return;
+            return nullptr;
         }
 
         EncodableList result;
@@ -683,8 +710,9 @@ namespace
             EncodableValue encodedVal = (EncodableValue)value;
             result.push_back(encodedVal);
         }
-        connected_device_sink_->EventSink::Success(result);
         free(buffer);
+
+        return std::make_shared<EncodableList>(result);
     }
 
 
@@ -710,7 +738,6 @@ namespace
         // Parse vector into a protobuf message via ParsePartialFromArray.
         // Note the call to `pVector->data()` (https://en.cppreference.com/w/cpp/container/vector/data),
         // and note further that this may return a null pointer if pVector->size() is 0 (hence prior check).
-        // T* req = new T();
         auto req = std::make_unique<T>();
         bool res = req->ParsePartialFromArray(pVector->data(), pVector->size());
         if (res)
@@ -784,7 +811,8 @@ namespace
 
             try {
                 GattCommunicationStatus writeStatus =
-                    gattChar.WriteValueAsync(buf, (withResponse) ? GattWriteOption::WriteWithResponse : GattWriteOption::WriteWithoutResponse).get();
+                    gattChar.WriteValueAsync(buf, (withResponse) ?
+                        GattWriteOption::WriteWithResponse : GattWriteOption::WriteWithoutResponse).get();
                 return std::make_shared<GattCommunicationStatus>(writeStatus);
             } catch (...) {
                 std::cerr << "Failed to write to characteristic. Can it be written to?" << std::endl;  // Debugging

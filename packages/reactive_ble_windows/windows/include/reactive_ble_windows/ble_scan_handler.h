@@ -30,6 +30,11 @@ namespace flutter
         BleScanHandler() {}
         virtual ~BleScanHandler() = default;
 
+        BleScanHandler(std::vector<winrt::hstring>* params)
+        {
+            scanParams = params;
+        }
+
         // Prevent copying.
         BleScanHandler(BleScanHandler const &) = delete;
         BleScanHandler &operator=(BleScanHandler const &) = delete;
@@ -42,9 +47,6 @@ namespace flutter
         virtual std::unique_ptr<flutter::StreamHandlerError<>> OnCancelInternal(
             const EncodableValue *arguments) override;
 
-        // void OnAdvertisementReceived(
-        //     winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher watcher,
-        //     winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs args);
         void DeviceWatcher_Added(
             winrt::Windows::Devices::Enumeration::DeviceWatcher sender,
             winrt::Windows::Devices::Enumeration::DeviceInformation deviceInfo);
@@ -57,10 +59,6 @@ namespace flutter
             winrt::Windows::Devices::Enumeration::DeviceWatcher sender,
             winrt::Windows::Devices::Enumeration::DeviceInformationUpdate deviceInfoUpdate);
 
-        void DeviceWatcher_EnumerationCompleted(
-            winrt::Windows::Devices::Enumeration::DeviceWatcher sender,
-            winrt::Windows::Foundation::IInspectable const&);
-
         void DeviceWatcher_Stopped(
             winrt::Windows::Devices::Enumeration::DeviceWatcher sender,
             winrt::Windows::Foundation::IInspectable const&);
@@ -68,14 +66,12 @@ namespace flutter
         void SendDeviceScanInfo(DeviceScanInfo msg);
 
         bool initialized = false;
-        // winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher bleWatcher = nullptr;
-        // winrt::event_token bluetoothLEWatcherReceivedToken;
+        std::vector<winrt::hstring>* scanParams;
         std::unique_ptr<flutter::EventSink<EncodableValue>> scan_result_sink_;
         winrt::Windows::Devices::Enumeration::DeviceWatcher deviceWatcher = nullptr;
         winrt::event_token deviceWatcherAddedToken;
         winrt::event_token deviceWatcherUpdatedToken;
         winrt::event_token deviceWatcherRemovedToken;
-        winrt::event_token deviceWatcherEnumerationCompletedToken;
         winrt::event_token deviceWatcherStoppedToken;
         std::map<std::string, DeviceScanInfo> discoveredDevices;
     };

@@ -77,7 +77,7 @@ namespace flutter
         if (!success)
         {
             free(buffer);
-            characteristic_sink_->EventSink::Error("Failed to serialize message into buffer.");  //TODO: Will this crash due to not having an error code?
+            characteristic_sink_->EventSink::Error("Failed to serialize message into buffer.");
             return;
         }
 
@@ -195,7 +195,6 @@ namespace flutter
 
         if (characteristic_sink_ == nullptr)
         {
-            //TODO: Is there a way the sink can be handled to avoid this case? Currently very fragile
             std::cerr << "Error: Characteristic sink not yet initialized." << std::endl;
             co_return;
         }

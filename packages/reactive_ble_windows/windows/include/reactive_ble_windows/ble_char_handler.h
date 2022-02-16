@@ -23,8 +23,6 @@ namespace flutter
     /*
     *  As the characteristic handler's OnListen/OnCancel methods get called for multiple method calls,
     *  this enum is used to differentiate between which method was called and hence how the handler should behave.
-    * 
-    *  TODO: Can this just be a bool? Is special handling needed in any case other than read vs not read?
     */
     enum CallingMethod
     {
@@ -80,6 +78,7 @@ namespace flutter
         concurrency::task<bool> SetNotifiableAsync(CharacteristicAddress charAddr, bool shouldSubscribe);
 
         winrt::fire_and_forget GattCharacteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args);
+
         GattCharacteristic gattChar{ nullptr };
         CharacteristicAddress* characteristicAddress;
         winrt::Windows::Storage::Streams::IBuffer* characteristicBuffer;
