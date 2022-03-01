@@ -371,16 +371,16 @@ packages:
   reactive_ble_mobile:
     dependency: "direct main"
     description:
-      name: reactive_ble_mobile
-      url: "https://pub.dartlang.org"
-    source: hosted
+      path: "../reactive_ble_mobile"
+      relative: true
+    source: path
     version: "5.0.2"
   reactive_ble_platform_interface:
     dependency: "direct main"
     description:
-      name: reactive_ble_platform_interface
-      url: "https://pub.dartlang.org"
-    source: hosted
+      path: "../reactive_ble_platform_interface"
+      relative: true
+    source: path
     version: "5.0.2"
   reactive_ble_windows:
     dependency: "direct main"
@@ -507,5 +507,5 @@ packages:
     source: hosted
     version: "3.1.0"
 sdks:
-  dart: ">=2.15.0-268.8.beta <3.0.0"
-  flutter: ">=2.5.0"
+  dart: ">=2.14.0 <3.0.0"
+  flutter: ">=2.0.0"
