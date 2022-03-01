@@ -227,6 +227,8 @@ namespace
             //       have not been able to find, for such filtering to occur a connection
             //       must be established with the advertising device and the service UUIDs
             //       subsequently obtained. This would likely significantly slow down scanning.
+            //       Alternatively - revert to BluetoothLEAdvertisementWatcher with potentially
+            //       unresolved connectivity issues.
 
             // scanMode and requireLocationServicesEnabled are Android specific, so are ignored.
             scanParams.clear();
