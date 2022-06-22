@@ -4,10 +4,7 @@ A Flutter plugin to enable Bluetooth Low Energy on Windows, intended for use in 
 
 ## Building
 [missing - install flutter tooling and visual studio]
-You will need `cmake` and `vcpkg` installed on your machine.
-
-### cmake
-Download the appropriate installer for your platform from https://cmake.org/download/ or your package manager and install `cmake`.
+You will need `vcpkg` installed on your machine.
 
 ### vcpkg
 Follow the instructions at https://github.com/microsoft/vcpkg to install `vcpkg`.
@@ -15,11 +12,14 @@ Follow the instructions at https://github.com/microsoft/vcpkg to install `vcpkg`
 When running the `integrate install` command, take note of the path to your toolchain file.
 
 ### Set up your environment
-Ensure that both the `cmake` and `vcpkg` commands are in your PATH and can be found.
+Ensure that `vcpkg` is in your PATH and can be found.
 
 Ensure that the `CMAKE_TOOLCHAIN_FILE` is set to the path you noted when installing `vcpkg`.
 
 ### Building
+
+For projects that use this library, copy `windows/vcpkg.json` into the `windows/` directory of your project to ensure that this libraries dependencies get built automatically.
+
 You can now run `flutter run -d "windows"`.
 
 **IMPORTANT**:
