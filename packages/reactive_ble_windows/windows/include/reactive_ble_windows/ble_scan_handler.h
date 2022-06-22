@@ -17,7 +17,7 @@
 #include <map>
 #include <sstream>
 
-#include "../lib/src/generated/bledata.pb.h"
+#include <bledata.pb.h>
 
 namespace flutter
 {

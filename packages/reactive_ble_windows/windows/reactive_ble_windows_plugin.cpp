@@ -25,7 +25,7 @@
 #include <iomanip>
 #include <variant>
 
-#include "../lib/src/generated/bledata.pb.h"
+#include <bledata.pb.h>
 #include "include/reactive_ble_windows/ble_char_handler.h"
 #include "include/reactive_ble_windows/ble_scan_handler.h"
 #include "include/reactive_ble_windows/ble_status_handler.h"

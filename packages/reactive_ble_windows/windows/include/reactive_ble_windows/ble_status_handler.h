@@ -11,7 +11,7 @@
 #include <winrt/Windows.Devices.Radios.h>
 #include <winrt/Windows.Foundation.Collections.h>
 
-#include "../lib/src/generated/bledata.pb.h"
+#include <bledata.pb.h>
 
 namespace flutter
 {

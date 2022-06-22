@@ -18,7 +18,7 @@
 #include <map>
 #include <algorithm>
 
-#include "../../../lib/src/generated/bledata.pb.h"
+#include <bledata.pb.h>
 #include "ble_utils.h"
 
 namespace

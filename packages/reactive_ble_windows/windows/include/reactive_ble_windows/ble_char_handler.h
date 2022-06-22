@@ -15,7 +15,7 @@
 #include <ppltasks.h>
 
 #include "include/reactive_ble_windows/ble_utils.h"
-#include "../lib/src/generated/bledata.pb.h"
+#include <bledata.pb.h>
 #include "../../bluetooth_device_agent.cpp"
 
 namespace flutter

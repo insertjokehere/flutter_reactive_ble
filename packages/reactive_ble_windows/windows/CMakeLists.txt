@@ -16,9 +16,11 @@ set(PLUGIN_NAME "reactive_ble_windows_plugin")
 include(FindProtobuf)
 find_package(Protobuf REQUIRED)
 include_directories(${PROTOBUF_INCLUDE_DIR})
+include_directories(${CMAKE_CURRENT_BINARY_DIR}) 
 
 PROTOBUF_GENERATE_CPP(PROTO_SRC PROTO_HEADER "../protos/bledata.proto")
 ADD_LIBRARY(proto ${PROTO_HEADER} ${PROTO_SRC})
+include_directories(${PROTO_HEADER})
 
 add_library(${PLUGIN_NAME} SHARED
   "reactive_ble_windows_plugin.cpp" "ble_status_handler.cpp" "ble_char_handler.cpp" "ble_scan_handler.cpp" "bluetooth_device_agent.cpp" "ble_utils.cpp"
@@ -26,11 +28,12 @@ add_library(${PLUGIN_NAME} SHARED
 apply_standard_settings(${PLUGIN_NAME})
 set_target_properties(${PLUGIN_NAME} PROPERTIES
   CXX_VISIBILITY_PRESET hidden)
+target_compile_features(${PLUGIN_NAME} PRIVATE cxx_std_20)
 target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
 target_include_directories(${PLUGIN_NAME} INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
-target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite proto)
+target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin ${PROTOBUF_LIBRARY} proto)
 
 
 # List of absolute paths to libraries that should be bundled with the plugin

@@ -15,7 +15,7 @@
 #include <iomanip>
 #include <sstream>
 
-#include "../../../lib/src/generated/bledata.pb.h"
+#include <bledata.pb.h>
 
 namespace BleUtils {
     std::string GuidToString(winrt::guid);
