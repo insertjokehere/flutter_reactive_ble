@@ -133,7 +133,7 @@ class ReactiveBleWindowsPlatform extends ReactiveBlePlatform {
     List<int> value,
   ) async =>
       _bleMethodChannel
-          .invokeMethod(
+          .invokeMethod<List<dynamic>>(
               "writeCharacteristicWithResponse",
               _argsToProtobufConverter
                   .createWriteChacracteristicRequest(characteristic, value)
@@ -147,7 +147,7 @@ class ReactiveBleWindowsPlatform extends ReactiveBlePlatform {
     List<int> value,
   ) async =>
       _bleMethodChannel
-          .invokeMethod(
+          .invokeMethod<List<dynamic>>(
             "writeCharacteristicWithoutResponse",
             _argsToProtobufConverter
                 .createWriteChacracteristicRequest(characteristic, value)
@@ -220,23 +220,16 @@ class ReactiveBleWindowsPlatform extends ReactiveBlePlatform {
           )
           .then((data) => _protobufConverter.clearGattCacheResultFrom(data!));
 
-  List<DiscoveredService> parse(data) {
-    // Helper method for readability
-    List<DiscoveredService> dat =
-        _protobufConverter.discoveredServicesFrom(List<int>.from(data!));
-    return dat;
-  }
-
   @override
   Future<List<DiscoveredService>> discoverServices(String deviceId) async =>
       _bleMethodChannel
-          .invokeMethod(
+          .invokeMethod<List<dynamic>>(
             "discoverServices",
             _argsToProtobufConverter
                 .createDiscoverServicesRequest(deviceId)
                 .writeToBuffer(),
           )
-          .then(parse);
+          .then((data) => _protobufConverter.discoveredServicesFrom(List<int>.from(data!)));
 }
 
 class ReactiveBleWindowsPlatformFactory {
@@ -254,29 +247,13 @@ class ReactiveBleWindowsPlatformFactory {
       argsToProtobufConverter: const ArgsToProtobufConverterImpl(),
       bleMethodChannel: _bleMethodChannel,
       bleStatusChannel:
-          bleStatusChannel.receiveBroadcastStream().map<List<int>>((e) {
-        List<int> result = [];
-        e.forEach((value) => result.add(value));
-        return result;
-      }),
+          bleStatusChannel.receiveBroadcastStream().map<List<int>>((dynamic e) => [for (dynamic value in e) value as int]),
       connectedDeviceChannel:
-          connectedDeviceChannel.receiveBroadcastStream().map<List<int>>((e) {
-        List<int> result = [];
-        e.forEach((value) => result.add(value));
-        return result;
-      }),
+          connectedDeviceChannel.receiveBroadcastStream().map<List<int>>((dynamic e) => [for (dynamic value in e) value as int]),
       charUpdateChannel:
-          charEventChannel.receiveBroadcastStream().map<List<int>>((e) {
-        List<int> result = [];
-        e.forEach((value) => result.add(value));
-        return result;
-      }),
+          charEventChannel.receiveBroadcastStream().map<List<int>>((dynamic e) => [for (dynamic value in e) value as int]),
       bleDeviceScanChannel:
-          scanEventChannel.receiveBroadcastStream().map<List<int>>((e) {
-        List<int> result = [];
-        e.forEach((value) => result.add(value));
-        return result;
-      }),
+          scanEventChannel.receiveBroadcastStream().map<List<int>>((dynamic e) => [for (dynamic value in e) value as int]),
     );
   }
 }
