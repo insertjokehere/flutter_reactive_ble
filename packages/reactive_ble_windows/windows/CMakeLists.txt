@@ -13,6 +13,7 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 # not be changed
 set(PLUGIN_NAME "reactive_ble_windows_plugin")
 
+# Protobuf
 include(FindProtobuf)
 find_package(Protobuf REQUIRED)
 include_directories(${PROTOBUF_INCLUDE_DIR})
@@ -22,8 +23,17 @@ PROTOBUF_GENERATE_CPP(PROTO_SRC PROTO_HEADER "../protos/bledata.proto")
 ADD_LIBRARY(proto ${PROTO_HEADER} ${PROTO_SRC})
 include_directories(${PROTO_HEADER})
 
+# SimpleBLE
+add_subdirectory("external/SimpleBLE")
+include_directories("external/SimpleBLE/include")
+
 add_library(${PLUGIN_NAME} SHARED
-  "reactive_ble_windows_plugin.cpp" "ble_status_handler.cpp" "ble_char_handler.cpp" "ble_scan_handler.cpp" "bluetooth_device_agent.cpp" "ble_utils.cpp"
+  "reactive_ble_windows_plugin.cpp"
+  "ble_status_handler.cpp"
+  "ble_char_handler.cpp"
+  "ble_scan_handler.cpp"
+  "bluetooth_device_agent.cpp"
+  "ble_utils.cpp"
 )
 apply_standard_settings(${PLUGIN_NAME})
 set_target_properties(${PLUGIN_NAME} PROPERTIES
@@ -33,7 +43,7 @@ target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
 target_include_directories(${PLUGIN_NAME} INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
-target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin ${PROTOBUF_LIBRARY} proto)
+target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin ${PROTOBUF_LIBRARY} proto simpleble-static)
 
 
 # List of absolute paths to libraries that should be bundled with the plugin

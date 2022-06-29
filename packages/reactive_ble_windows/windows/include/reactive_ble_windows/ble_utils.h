@@ -9,6 +9,8 @@
 #include <winrt/Windows.Devices.Bluetooth.h>
 #include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
 
+#include <simpleble/Adapter.h>
+
 #include <map>
 #include <algorithm>
 #include <iostream>
@@ -22,6 +24,8 @@ namespace BleUtils {
     std::vector<uint8_t> GuidToByteVec(winrt::guid guid);
     std::string ProtobufUuidToString(Uuid uuid);
     winrt::guid ProtobufUuidToGuid(Uuid uuid);
+
+    std::optional<SimpleBLE::Adapter> getAdapter();
 }
 
 #endif

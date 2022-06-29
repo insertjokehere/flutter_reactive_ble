@@ -1,18 +1,11 @@
 {
-    "name": "flutter-ble-windows",
-    "version-string": "0.0.1",
-    "port-version": 6,
-    "homepage": "https://www.taskaprosthetics.com",
-    "description": "-",
-    "dependencies": [
-      "protobuf"
-    ],
-    "builtin-baseline": "1b664707c109f5d48b0b142e96117a53deb653be",
-    "overrides": [
-        {
-            "name": "protobuf",
-            "version": "3.6.1-1"
-        }
-    ]
-
-  }
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+  "name": "reactive-ble-windows",
+  "version": "0.0.1",
+  "builtin-baseline": "7c92c79a1a0a0ab4ab9c6d8b544495a68ab4835c",
+  "dependencies": [
+    {"name": "protobuf",
+      "version>=": "3.19.4"
+    }
+  ]
+}

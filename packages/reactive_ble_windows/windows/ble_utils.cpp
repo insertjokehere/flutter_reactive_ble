@@ -98,3 +98,18 @@ winrt::guid BleUtils::ProtobufUuidToGuid(Uuid uuid)
 
     return result;
 }
+
+/**
+ * @brief Fetch the first adapter on the system, if one is available
+ */
+std::optional<SimpleBLE::Adapter> BleUtils::getAdapter() {
+    auto adapter_list = SimpleBLE::Adapter::get_adapters();
+
+    // no adapter found
+    if (adapter_list.empty()) {
+        std::cerr << "No adapter was found." << std::endl;
+        return {};
+    }
+
+    return adapter_list.at(0);
+}

@@ -1,0 +1,24 @@
+diff --git a/packages/reactive_ble_windows/windows/ble_char_handler.cpp b/packages/reactive_ble_windows/windows/ble_char_handler.cpp
+index 9623721..f1cd332 100644
+--- a/packages/reactive_ble_windows/windows/ble_char_handler.cpp
++++ b/packages/reactive_ble_windows/windows/ble_char_handler.cpp
+@@ -214,9 +214,18 @@ namespace flutter
+ 
+         CharacteristicValueInfo updatedCharacteristic;
+         updatedCharacteristic.mutable_characteristic()->CopyFrom(charAddr);
+-        for (size_t i = 0; i < characteristicValue.Length(); i++)
+-            updatedCharacteristic.mutable_value()->push_back(reader.ReadByte());
+ 
++        int length = characteristicValue.Length();
++        std::vector<uint8_t> data(length);
++        reader.ReadBytes(data);
++
++        // Debugging output
++        for(int i=0; i < length; i++) {
++            std::cout << (int) data[i] << ",";
++        }
++        std::cout << std::endl;
++
++        updatedCharacteristic.set_value(std::string (data.begin(), data.end()));
+         EncodeAndSend(updatedCharacteristic);
+     }

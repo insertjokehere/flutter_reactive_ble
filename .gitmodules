@@ -1,0 +1,3 @@
+[submodule "packages\\reactive_ble_windows\\windows\\external\\SimpleBLE"]
+	path = packages\\reactive_ble_windows\\windows\\external\\SimpleBLE
+	url = https://github.com/OpenBluetoothToolbox/SimpleBLE.git
