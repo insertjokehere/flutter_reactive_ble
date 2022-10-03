@@ -13,10 +13,13 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 # not be changed
 set(PLUGIN_NAME "reactive_ble_windows_plugin")
 
+message("Windows SDK version: ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
+set(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION, "10.0.22000.0")
+
 include(FindProtobuf)
 find_package(Protobuf REQUIRED)
 include_directories(${PROTOBUF_INCLUDE_DIR})
-include_directories(${CMAKE_CURRENT_BINARY_DIR}) 
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 PROTOBUF_GENERATE_CPP(PROTO_SRC PROTO_HEADER "../protos/bledata.proto")
 ADD_LIBRARY(proto ${PROTO_HEADER} ${PROTO_SRC})
